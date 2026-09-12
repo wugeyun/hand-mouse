@@ -22,6 +22,8 @@
 
 右手食指向上会进入精细鼠标移动模式。移动过程中识别到左手握拳会立即冻结光标并退出移动模式；左拳松开后，右手食指需要重新稳定 500ms 才能再次进入。
 
+鼠标移动采用非线性加速：慢速移动使用较低增益以便精确定位，快速移动会沿平方曲线提高增益以便横跨屏幕；增益设有上限，静止时的小幅抖动会被死区过滤。
+
 输出事件会发送给当前获得焦点的应用。只要目标应用能够响应对应的标准鼠标事件，浏览器、macOS 访达、Windows 文件管理器、PPT、图片查看器和各种办公软件都可以使用；项目不会判断当前应用是否支持某个动作，最终效果取决于目标应用自己的鼠标行为。
 
 ## 运行条件与安装
@@ -32,10 +34,10 @@
 
 ### 1. 获取项目
 
-把下面的 `YOUR_GITHUB_USERNAME` 替换成实际仓库所有者：
+克隆正式仓库：
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/hand-mouse.git
+git clone https://github.com/wugeyun/hand-mouse.git
 cd hand-mouse
 ```
 
@@ -181,7 +183,10 @@ python -m hand_mouse --live \
   --scroll-repeat-interval 0.25 \
   --click-stable-time 0.50 \
   --pointer-stable-time 0.50 \
-  --fine-sensitivity 0.35
+  --fine-sensitivity 0.35 \
+  --cursor-max-gain 3.00 \
+  --cursor-acceleration-speed 1.00 \
+  --cursor-deadzone 0.0015
 ```
 
 也可以直接运行源码入口：

@@ -75,8 +75,13 @@ Thresholds use normalized camera coordinates or relative projection sizes, so th
 - `--scroll-repeat-interval`: interval between continuous scroll events.
 - `--click-stable-time`: how long the right horizontal-thumb pose must remain stable before left click.
 - `--pointer-stable-time`: how long the pointer pose must remain stable before entering mouse mode.
-- `--cursor-smoothing`: smoothing factor for fine pointer movement.
-- `--fine-sensitivity`: relative movement sensitivity in fine mode.
+- `--cursor-smoothing`: per-frame movement smoothing factor.
+- `--fine-sensitivity`: base gain for slow movement.
+- `--cursor-max-gain`: capped gain for fast movement.
+- `--cursor-acceleration-speed`: normalized hand speed that reaches maximum gain.
+- `--cursor-deadzone`: minimum normalized displacement used to filter stationary jitter.
+
+Pointer gain uses a squared curve: `base_gain + (max_gain - base_gain) * speed_ratio^2`. `speed_ratio` is clamped to `0..1`, allowing fast motion to cross the screen while preserving precise slow movement.
 
 For accidental activations, increase `--scroll-stable-time` and improve lighting or enlarge the camera framing area.
 

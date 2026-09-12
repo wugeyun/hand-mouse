@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Optional, Sequence
 
 from . import __version__
 from .controller import InputController
-from .pointer import CursorMapper, PointerModeDetector
+from .pointer import POINTER_FINE, CursorMapper, PointerModeDetector
 
 if TYPE_CHECKING:
     from .detectors import HandPose
@@ -31,6 +31,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pointer-stable-time", type=float, default=0.5)
     parser.add_argument("--cursor-smoothing", type=float, default=0.35)
     parser.add_argument("--fine-sensitivity", type=float, default=0.35)
+    parser.add_argument("--cursor-max-gain", type=float, default=3.0)
+    parser.add_argument("--cursor-acceleration-speed", type=float, default=1.0)
+    parser.add_argument("--cursor-deadzone", type=float, default=0.0015)
     return parser
 
 
@@ -143,6 +146,9 @@ def run(args: argparse.Namespace) -> int:
         controller.screen_size(),
         smoothing=args.cursor_smoothing,
         fine_sensitivity=args.fine_sensitivity,
+        max_gain=args.cursor_max_gain,
+        acceleration_speed=args.cursor_acceleration_speed,
+        deadzone=args.cursor_deadzone,
     )
     last_action = ""
 
@@ -162,9 +168,13 @@ def run(args: argparse.Namespace) -> int:
                 pointer_mode = pointer_detector.update(poses, now)
                 right_pose = next((pose for pose in poses if pose.handedness == "right"), None)
                 if pointer_mode != cursor_mapper.mode:
-                    cursor_mapper.set_mode(pointer_mode, right_pose, controller.position())
+                    cursor_mapper.set_mode(pointer_mode, right_pose, controller.position(), now)
                 motion_ready = right_pose is not None and is_index_motion_ready(right_pose.points)
-                cursor_position = cursor_mapper.update(right_pose) if motion_ready else None
+                if motion_ready:
+                    cursor_position = cursor_mapper.update(right_pose, now)
+                else:
+                    cursor_mapper.freeze(right_pose if pointer_mode == POINTER_FINE else None, now)
+                    cursor_position = None
                 if cursor_position is not None:
                     controller.move_cursor(cursor_position)
 
@@ -182,7 +192,7 @@ def run(args: argparse.Namespace) -> int:
                     click_detector.reset()
                     scroll_detector.reset()
                     if pointer_mode == "idle":
-                        cursor_mapper.set_mode(pointer_mode, None, controller.position())
+                        cursor_mapper.set_mode(pointer_mode, None, controller.position(), now)
 
                 if not args.no_preview:
                     tracker.draw_landmarks(frame, result)

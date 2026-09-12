@@ -11,7 +11,7 @@ from hand_mouse.detectors import (
     is_index_motion_ready,
     is_index_pointing,
 )
-from hand_mouse.pointer import POINTER_FINE, POINTER_IDLE, PointerModeDetector
+from hand_mouse.pointer import POINTER_FINE, POINTER_IDLE, CursorMapper, PointerModeDetector
 
 
 def pose(center: tuple[float, float], scale: float = 0.2, finger_count: int = 0) -> HandPose:
@@ -97,6 +97,41 @@ def test_right_index_arms_fine_pointer_and_left_fist_stops_it() -> None:
     assert detector.update([right], 1.1) == POINTER_IDLE
     assert detector.update([right], 1.6) == POINTER_FINE
     assert detector.update([], 1.7) == POINTER_IDLE
+
+
+def test_cursor_acceleration_moves_farther_for_faster_motion() -> None:
+    base = pointing_pose("right")
+    base.points[8, :2] = (0.5, 0.5)
+
+    slow_mapper = CursorMapper(
+        (1000, 1000),
+        smoothing=1.0,
+        fine_sensitivity=0.2,
+        max_gain=2.0,
+        acceleration_speed=1.0,
+        deadzone=0.0,
+    )
+    slow_mapper.set_mode(POINTER_FINE, base, (500, 500), 0.0)
+    slow = pointing_pose("right")
+    slow.points[8, :2] = (0.51, 0.5)
+    slow_position = slow_mapper.update(slow, 0.1)
+
+    fast_mapper = CursorMapper(
+        (1000, 1000),
+        smoothing=1.0,
+        fine_sensitivity=0.2,
+        max_gain=2.0,
+        acceleration_speed=1.0,
+        deadzone=0.0,
+    )
+    fast_mapper.set_mode(POINTER_FINE, base, (500, 500), 0.0)
+    fast = pointing_pose("right")
+    fast.points[8, :2] = (0.51, 0.5)
+    fast_position = fast_mapper.update(fast, 0.01)
+
+    assert slow_position is not None
+    assert fast_position is not None
+    assert fast_position[0] - 500 > (slow_position[0] - 500) * 4
 
 
 def test_count_extended_fingers_distinguishes_four_and_five() -> None:

@@ -75,8 +75,13 @@ python -m hand_mouse --live
 - `--scroll-repeat-interval`：连续滚动事件之间的间隔。
 - `--click-stable-time`：右手拇指横向姿态持续多久后确认左键。
 - `--pointer-stable-time`：食指指针姿态持续多久后进入鼠标模式。
-- `--cursor-smoothing`：精细指针的平滑系数。
-- `--fine-sensitivity`：精细指针的相对移动灵敏度。
+- `--cursor-smoothing`：每帧位移的平滑系数。
+- `--fine-sensitivity`：慢速移动时的基础增益。
+- `--cursor-max-gain`：快速移动时的最大增益。
+- `--cursor-acceleration-speed`：达到最大增益时的归一化手部速度。
+- `--cursor-deadzone`：忽略静止抖动的最小归一化位移。
+
+指针增益使用平方曲线：`base_gain + (max_gain - base_gain) * speed_ratio^2`。`speed_ratio` 限制在 `0..1`，因此快速动作可以跨越屏幕，慢速动作仍保留精细控制。
 
 误触发时提高 `--scroll-stable-time`，并增加光照或扩大摄像头取景区域。
 

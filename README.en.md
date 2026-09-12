@@ -22,6 +22,8 @@ Scroll direction no longer depends on vertical movement. The left palm always sc
 
 Pointing the right index finger up arms fine cursor movement. A detected left fist immediately freezes the cursor and exits pointer mode. After the fist is released, the right index must remain stable for another 500ms before movement resumes.
 
+Cursor movement uses nonlinear acceleration: slow movement keeps a low gain for precise positioning, while fast movement follows a squared curve toward a capped high gain for crossing the screen. A small dead zone filters stationary hand jitter.
+
 Events are sent to the currently focused application. Any target that responds to standard mouse events can use the controller, including browsers, macOS Finder, Windows File Explorer, PPT viewers, image viewers, and office software. The project does not determine whether an application supports a particular action, so the final behavior depends on that application's own mouse handling.
 
 ## Requirements And Installation
@@ -32,10 +34,10 @@ The project requires Python 3.10 or newer; Python 3.12 is recommended. Do not re
 
 ### 1. Get the project
 
-Replace `YOUR_GITHUB_USERNAME` with the actual repository owner:
+Clone the official repository:
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/hand-mouse.git
+git clone https://github.com/wugeyun/hand-mouse.git
 cd hand-mouse
 ```
 
@@ -181,7 +183,10 @@ python -m hand_mouse --live \
   --scroll-repeat-interval 0.25 \
   --click-stable-time 0.50 \
   --pointer-stable-time 0.50 \
-  --fine-sensitivity 0.35
+  --fine-sensitivity 0.35 \
+  --cursor-max-gain 3.00 \
+  --cursor-acceleration-speed 1.00 \
+  --cursor-deadzone 0.0015
 ```
 
 The source-checkout entry point is also available:
