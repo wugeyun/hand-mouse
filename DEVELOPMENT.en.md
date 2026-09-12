@@ -8,7 +8,7 @@ The project targets general desktop interaction, so it prioritizes low cognitive
 
 - No user-specific gesture training.
 - No complex per-finger gesture classification.
-- Detection is based on hand distance, palm-center movement, and fist projection-size changes.
+- Detection is based on handedness, open-palm state, and thumb posture.
 - Detectors emit abstract actions; OS input injection stays in a separate controller.
 - Dry-run is the default. Real input requires the explicit `--live` flag.
 
@@ -16,9 +16,10 @@ The project targets general desktop interaction, so it prioritizes low cognitive
 
 ```text
 src/hand_mouse/
-  cli.py         # camera loop, MediaPipe adapter, and CLI arguments
+  cli.py         # camera loop and CLI arguments
   controller.py  # PyAutoGUI input events and platform modifiers
   detectors.py   # pure geometry/time-series gesture detectors
+  tracker.py     # MediaPipe Tasks API and model cache
 tests/
   test_detectors.py
 run_hand_mouse.py # source-checkout entry point
@@ -27,14 +28,13 @@ run_hand_mouse.py # source-checkout entry point
 The data flow is:
 
 ```text
-camera frame -> MediaPipe landmarks -> HandPose -> detector -> abstract action -> PyAutoGUI
+camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract action -> PyAutoGUI
 ```
 
 ## Action contracts
 
-- `ZoomDetector.update(hands, now)` returns `1` for hands apart/zoom in, `-1` for hands together/zoom out, and `0` otherwise.
-- `SwipeDetector.update(center, now)` returns `1` for scroll up, `-1` for scroll down, and `0` otherwise.
-- `FistTapDetector.update(pose, now)` returns a list containing `left_click` or `right_click`. Two pulses resolve to left click after the counting window; three pulses resolve to right click immediately.
+- `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after a stable left open palm for scroll up and `-1` after a stable right open palm for scroll down. Holding an open palm does not repeat the action.
+- `ThumbUpClickDetector.update(thumbs_up, now)` returns `True` after `--click-stable-time` seconds of thumb-up stability and `False` while the state is held or for other states. Leaving thumb-up is required before another click can fire.
 - `InputController` is the only class allowed to send real input events. Detectors and unit tests must not call PyAutoGUI directly.
 
 ## Local development
@@ -70,19 +70,16 @@ python -m hand_mouse --live
 
 Thresholds use normalized camera coordinates or relative projection sizes, so they are not tied to one resolution:
 
-- `--zoom-threshold`: minimum change in hand-to-hand distance.
-- `--swipe-distance`: minimum vertical swipe displacement.
-- `--swipe-speed`: minimum swipe speed.
-- `--pulse-threshold`: fist projection-size change relative to its baseline.
-- `--tap-window`: maximum interval between fist pulses.
+- `--scroll-stable-time`: how long an open palm must remain stable before scrolling.
+- `--click-stable-time`: how long a thumbs-up pose must remain stable before left click.
 
-When the user is farther from the camera, lower `--swipe-distance` and `--pulse-threshold` first. For accidental activations, increase them and improve lighting or enlarge the camera framing area.
+For accidental activations, increase `--scroll-stable-time` and improve lighting or enlarge the camera framing area.
 
 ## Adding an input backend
 
 To replace PyAutoGUI:
 
-1. Implement the same `scroll`, `zoom`, `left_click`, and `right_click` methods in `controller.py`.
+1. Implement the same `scroll` and `left_click` methods in `controller.py`.
 2. Keep `--live` as the only switch that enables real system input.
 3. Keep the backend importable and testable in headless CI.
 4. Document platform permissions, focus-window behavior, and failure recovery.
@@ -92,7 +89,7 @@ To replace PyAutoGUI:
 - Update the version in `pyproject.toml`, `src/hand_mouse/__init__.py`, and `CHANGELOG.md`.
 - Run `ruff check .` and `pytest`.
 - Complete a dry-run camera test on at least one target platform.
-- Verify scroll, zoom, left click, and right click in target browsers, file managers, office software, or other desktop applications.
+- Verify scroll and left click in target browsers, file managers, office software, or other desktop applications.
 - Verify that no system input is sent without `--live`.
 - Check licenses for dependencies and new files.
 - Create a Git tag and describe verified platforms and known limitations in the GitHub Release.

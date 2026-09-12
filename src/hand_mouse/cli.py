@@ -14,46 +14,28 @@ if TYPE_CHECKING:
     from .detectors import HandPose
 
 
-def load_hands_backend():
-    """Load the legacy Hands API explicitly across MediaPipe package layouts."""
-    try:
-        from mediapipe.python.solutions import drawing_utils, hands
-    except ImportError:
-        try:
-            from mediapipe import solutions as mp_solutions
-        except ImportError as exc:
-            raise RuntimeError("MediaPipe Hands API is not available") from exc
-        drawing_utils = mp_solutions.drawing_utils
-        hands = mp_solutions.hands
-    return drawing_utils, hands
-
-
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Coarse webcam gesture controller for desktop applications")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--camera", type=int, default=0, help="camera device index")
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--height", type=int, default=540)
+    parser.add_argument("--model", help="path to a MediaPipe hand_landmarker.task model")
     parser.add_argument("--live", action="store_true", help="send real mouse events; default is dry-run")
     parser.add_argument("--no-preview", action="store_true", help="do not open the camera preview window")
-    parser.add_argument("--zoom-mode", choices=("wheel", "keys"), default="wheel", help="zoom mapping")
     parser.add_argument("--scroll-amount", type=int, default=5)
-    parser.add_argument("--zoom-amount", type=int, default=2)
-    parser.add_argument("--zoom-threshold", type=float, default=0.08)
-    parser.add_argument("--swipe-distance", type=float, default=0.18)
-    parser.add_argument("--swipe-speed", type=float, default=0.45)
-    parser.add_argument("--pulse-threshold", type=float, default=0.14)
-    parser.add_argument("--tap-window", type=float, default=0.75)
+    parser.add_argument("--scroll-stable-time", type=float, default=0.5)
+    parser.add_argument("--click-stable-time", type=float, default=0.3)
     return parser
 
 
-def draw_status(frame: Any, hands: list["HandPose"], controller: InputController, action: str, tap_count: int) -> None:
+def draw_status(frame: Any, hands: list["HandPose"], controller: InputController, action: str) -> None:
     import cv2
 
     mode = "LIVE" if controller.live else "DRY-RUN"
     cv2.putText(
         frame,
-        f"MODE: {mode}  HANDS: {len(hands)}",
+        f"MODE: {mode}  HANDS: {len(hands)}  HAND: {hands[0].handedness if len(hands) == 1 else '-'}  FINGERS: {hands[0].finger_count if len(hands) == 1 else '-'}  THUMB UP: {hands[0].thumbs_up if len(hands) == 1 else '-'}",
         (20, 32),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
@@ -62,7 +44,7 @@ def draw_status(frame: Any, hands: list["HandPose"], controller: InputController
     )
     cv2.putText(
         frame,
-        f"LAST: {action or '-'}  FIST TAPS: {tap_count}",
+        f"LAST: {action or '-'}",
         (20, 62),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.62,
@@ -71,7 +53,7 @@ def draw_status(frame: Any, hands: list["HandPose"], controller: InputController
     )
     cv2.putText(
         frame,
-        "2 hands: zoom | 1 hand wave: scroll | fist pulse x2/x3: click",
+        "thumb up: left click | left palm: above | right palm: below",
         (20, 92),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.52,
@@ -90,26 +72,26 @@ def draw_status(frame: Any, hands: list["HandPose"], controller: InputController
 
 
 def run(args: argparse.Namespace) -> int:
-    from .detectors import FistTapDetector, SwipeDetector, ZoomDetector, make_pose
+    from .detectors import OpenPalmScrollDetector, ThumbUpClickDetector
+    from .tracker import MediaPipeHandTracker
 
     try:
         import cv2
-        drawing_utils, hands_module = load_hands_backend()
     except ImportError as exc:
         print(f"Missing dependency: {exc.name}. Install the project dependencies first.", file=sys.stderr)
-        return 2
-    except RuntimeError as exc:
-        print(str(exc), file=sys.stderr)
-        print("Use a MediaPipe build with the legacy Hands API or add a Tasks API backend.", file=sys.stderr)
         return 2
 
     try:
         controller = InputController(
             live=args.live,
             scroll_amount=args.scroll_amount,
-            zoom_amount=args.zoom_amount,
-            zoom_mode=args.zoom_mode,
         )
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    try:
+        tracker = MediaPipeHandTracker(model_path=args.model)
     except RuntimeError as exc:
         print(str(exc), file=sys.stderr)
         return 2
@@ -119,36 +101,16 @@ def run(args: argparse.Namespace) -> int:
     capture.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
     if not capture.isOpened():
         print(f"Cannot open camera {args.camera}", file=sys.stderr)
+        tracker.close()
         return 1
 
-    zoom_detector = ZoomDetector(threshold=args.zoom_threshold)
-    swipe_detector = SwipeDetector(
-        min_displacement=args.swipe_distance,
-        min_speed=args.swipe_speed,
-    )
-    fist_detector = FistTapDetector(
-        pulse_threshold=args.pulse_threshold,
-        tap_window=args.tap_window,
-    )
+    click_detector = ThumbUpClickDetector(stable_time=args.click_stable_time)
+    scroll_detector = OpenPalmScrollDetector(stable_time=args.scroll_stable_time)
     last_action = ""
 
-    def dispatch(event: str) -> None:
-        nonlocal last_action
-        if event == "left_click":
-            controller.left_click()
-            last_action = "left click"
-        elif event == "right_click":
-            controller.right_click()
-            last_action = "right click"
-
+    start_time = time.monotonic()
     try:
-        with hands_module.Hands(
-            static_image_mode=False,
-            max_num_hands=2,
-            model_complexity=1,
-            min_detection_confidence=0.6,
-            min_tracking_confidence=0.6,
-        ) as hands_model:
+        with tracker:
             while True:
                 ok, frame = capture.read()
                 if not ok:
@@ -157,47 +119,25 @@ def run(args: argparse.Namespace) -> int:
 
                 frame = cv2.flip(frame, 1)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                result = hands_model.process(rgb)
-                poses = [make_pose(item) for item in (result.multi_hand_landmarks or [])]
                 now = time.monotonic()
+                result, poses = tracker.process(rgb, int((now - start_time) * 1000))
 
-                if len(poses) == 2:
-                    zoom_event = zoom_detector.update(poses, now)
-                    swipe_detector.reset()
-                    for event in fist_detector.update(None, now):
-                        dispatch(event)
-                    if zoom_event:
-                        controller.zoom(zoom_event)
-                        last_action = "zoom in" if zoom_event > 0 else "zoom out"
-                elif len(poses) == 1:
-                    zoom_detector.reset()
+                if len(poses) == 1:
                     pose = poses[0]
-                    if pose.fist:
-                        swipe_detector.reset()
-                        for event in fist_detector.update(pose, now):
-                            dispatch(event)
-                    else:
-                        for event in fist_detector.update(None, now):
-                            dispatch(event)
-                        swipe_event = swipe_detector.update(pose.center, now)
-                        if swipe_event:
-                            controller.scroll(swipe_event)
-                            last_action = "scroll up" if swipe_event > 0 else "scroll down"
+                    if click_detector.update(pose.thumbs_up, now):
+                        controller.left_click()
+                        last_action = "left click"
+                    scroll_event = scroll_detector.update(pose.finger_count, pose.handedness, now)
+                    if scroll_event:
+                        controller.scroll(scroll_event)
+                        last_action = "scroll up" if scroll_event > 0 else "scroll down"
                 else:
-                    zoom_detector.reset()
-                    swipe_detector.reset()
-                    for event in fist_detector.update(None, now):
-                        dispatch(event)
+                    click_detector.reset()
+                    scroll_detector.reset()
 
                 if not args.no_preview:
-                    if result.multi_hand_landmarks:
-                        for hand_landmarks in result.multi_hand_landmarks:
-                            drawing_utils.draw_landmarks(
-                                frame,
-                                hand_landmarks,
-                                hands_module.HAND_CONNECTIONS,
-                            )
-                    draw_status(frame, poses, controller, last_action, fist_detector.tap_count)
+                    tracker.draw_landmarks(frame, result)
+                    draw_status(frame, poses, controller, last_action)
                     cv2.imshow("hand-mouse", frame)
                     key = cv2.waitKey(1) & 0xFF
                     if key in (27, ord("q")):

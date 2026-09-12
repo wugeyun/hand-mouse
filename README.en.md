@@ -1,6 +1,6 @@
 # Hand Mouse
 
-A coarse webcam gesture input controller for general desktop applications. It intentionally recognizes large movements instead of fine-grained finger poses, so a small set of gestures can replace common wheel, zoom, and mouse-click actions.
+A coarse webcam gesture input controller for general desktop applications. It intentionally recognizes large movements instead of fine-grained finger poses, so a small set of gestures can replace common wheel and left-click actions.
 
 [中文 README](README.md) | [Development Guide](DEVELOPMENT.en.md) | [Contributing](CONTRIBUTING.en.md)
 
@@ -12,16 +12,13 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 
 | Gesture | Output | Notes |
 | --- | --- | --- |
-| Move both hands apart | Zoom in | Sends `Ctrl/Command + mouse wheel up` by default |
-| Move both hands together | Zoom out | Sends `Ctrl/Command + mouse wheel down` by default |
-| Swipe one hand up | Mouse wheel up | One event per clear swipe |
-| Swipe one hand down | Mouse wheel down | One event per clear swipe |
-| Move a fist toward and away from the camera twice | Left click | Must happen within a short counting window |
-| Move a fist toward and away from the camera three times | Right click | Must happen within a short counting window |
+| Hold the left palm open | Scroll page up | Fires once after about 500ms |
+| Hold the right palm open | Scroll page down | Fires once after about 500ms |
+| Thumbs up | Left click | Requires about 300ms of stability by default; fires once per entry |
 
-In this project, a “fist tap” means that the fist becomes visibly larger in the camera image and then returns to its previous size. It is a forward/backward motion relative to the camera, not a physical collision. A single pulse is ignored to reduce accidental clicks during use.
+Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Holding an open palm does not repeat the action; close the hand or remove it from the frame before triggering again.
 
-Events are sent to the currently focused application. Any target that responds to the corresponding standard mouse or keyboard events can use the controller, including browsers, macOS Finder, Windows File Explorer, PPT viewers, image viewers, and office software. The project does not determine whether an application supports a particular action, so the final behavior depends on that application's own mouse and shortcut handling. Use `--zoom-mode keys` for applications that use `Ctrl/Command +` and `Ctrl/Command -`.
+Events are sent to the currently focused application. Any target that responds to standard mouse events can use the controller, including browsers, macOS Finder, Windows File Explorer, PPT viewers, image viewers, and office software. The project does not determine whether an application supports a particular action, so the final behavior depends on that application's own mouse handling.
 
 ## Requirements And Installation
 
@@ -104,6 +101,8 @@ python -m pip install -e .
 python -m hand_mouse --version
 ```
 
+On the first start, the program downloads `hand_landmarker.task` from the official MediaPipe model endpoint and caches it in the user cache directory. The model is used for local hand-landmark detection; if the machine cannot reach that endpoint, download the model manually and pass it with `--model PATH`.
+
 For maintenance work or tests, install development dependencies:
 
 ```bash
@@ -120,10 +119,9 @@ python run_hand_mouse.py
 
 Test these actions in order:
 
-- Move both hands apart or together; the terminal should print `zoom in` or `zoom out`.
-- Swipe one hand up or down; it should print `scroll up` or `scroll down`.
-- Move a fist toward and away from the camera twice; after the counting window it should print `left click`.
-- Move a fist toward and away from the camera three times; it should print `right click`.
+- Hold the left palm open for about 500ms; it should print `scroll up` once.
+- Hold the right palm open for about 500ms; it should print `scroll down` once.
+- Hold a thumbs-up pose; the terminal should print one `left click` after about 500ms. Holding it must not repeat the click.
 
 Only continue to live input after dry-run output is stable.
 
@@ -135,19 +133,16 @@ Prepare a safe target application such as a normal browser page, a temporary fol
 python run_hand_mouse.py --live --no-preview
 ```
 
-Switch to the target application after the process starts and make sure its window is focused before testing scroll, zoom, and clicks. Events are sent to the focused window; the project does not determine whether the target supports a particular action.
+Switch to the target application after the process starts and make sure its window is focused before testing scroll and left clicks. Events are sent to the focused window; the project does not determine whether the target supports a particular action.
 
-Return to the terminal and press `Ctrl+C` when testing is finished. If zoom does not work, try:
-
-```bash
-python run_hand_mouse.py --live --no-preview --zoom-mode keys
-```
+Return to the terminal and press `Ctrl+C` when testing is finished.
 
 ### 7. Permissions and troubleshooting
 
 - macOS: in System Settings -> Privacy & Security, grant Camera and Accessibility permissions to the terminal or application running the controller.
 - Windows: allow Python or the terminal to access the camera; use `py --list` to inspect installed versions.
 - `No module named cv2` or `mediapipe`: confirm that `.venv` is active and run `python -m pip install -e .`; do not use another Python's `pip`.
+- Model download failure: prepare `hand_landmarker.task` manually and run `python run_hand_mouse.py --model PATH`.
 - `Cannot open camera 0`: check camera permissions or try `--camera 1` or `--camera 2`.
 - Dry-run works but live input does not: check macOS Accessibility permissions and the focused target window first.
 
@@ -175,11 +170,9 @@ Useful tuning options:
 
 ```bash
 python -m hand_mouse --live \
-  --zoom-mode keys \
   --scroll-amount 4 \
-  --zoom-amount 1 \
-  --swipe-distance 0.20 \
-  --pulse-threshold 0.16
+  --scroll-stable-time 0.50 \
+  --click-stable-time 0.50
 ```
 
 The source-checkout entry point is also available:
