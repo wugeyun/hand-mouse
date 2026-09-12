@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hand-mouse"
-version = "0.1.4"
+version = "0.1.5"
 description = "Coarse webcam hand gestures for desktop mouse actions"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -15,6 +15,7 @@ dependencies = [
     "opencv-contrib-python>=4.8",
     "numpy>=1.24",
     "pyautogui>=0.9.54",
+    "screeninfo>=0.8",
 ]
 
 [project.optional-dependencies]

@@ -15,14 +15,16 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 | Hold the left palm open | Continuously scroll page up | Starts after about 1000ms and repeats while held |
 | Hold the right palm open | Continuously scroll page down | Starts after about 1000ms and repeats while held |
 | Extend the right thumb sideways | Left click | Other fingers folded; fires once after about 500ms |
-| Point the right index finger up | Fine mouse movement | Arms after about 500ms; the index controls the cursor |
-| Make a fist with the left hand | Stop mouse movement immediately | No delay; locks the current cursor position |
+| Pinch the right thumb and index finger | Fine mouse movement | Arms after about 500ms; the pinch midpoint controls the cursor until release |
+| Make a fist with either hand | Global emergency stop | Immediately stops scrolling, clicking, and pointer movement |
 
 Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Scrolling starts after 1000ms of stability and repeats while the palm is held open; closing the hand or removing it from the frame stops scrolling immediately.
 
-Pointing the right index finger up arms fine cursor movement. A detected left fist immediately freezes the cursor and exits pointer mode. After the fist is released, the right index must remain stable for another 500ms before movement resumes.
+Pinching the right thumb and index finger for about 500ms arms fine cursor movement. The midpoint between the two fingertips controls the cursor, and separating them stops movement immediately. The current cursor position is preserved when the pinch starts; if the full hand temporarily disappears, local fingertip tracking can continue the gesture.
 
-Cursor movement uses nonlinear acceleration: slow movement keeps a low gain for precise positioning, while fast movement follows a squared curve toward a capped high gain for crossing the screen. A small dead zone filters stationary hand jitter.
+Cursor movement maps the normalized pinch midpoint in the camera frame to the full bounds of the display currently containing the mouse, including the menu bar and Dock/taskbar. Reaching a camera edge therefore reaches the corresponding display edge. Entering fine mode keeps the current cursor position and smoothly removes the initial offset instead of jumping. Multi-monitor mapping is selected from the display containing the cursor each time fine mode starts, and the active mode does not switch displays automatically. Fast motion still increases target-follow speed, while a small dead zone filters stationary hand jitter.
+
+A fist with either hand is a global emergency stop. It immediately stops scrolling, clicking, pinch movement, and local fingertip tracking. After the fist is released, every gesture must satisfy its own stability period again.
 
 Events are sent to the currently focused application. Any target that responds to standard mouse events can use the controller, including browsers, macOS Finder, Windows File Explorer, PPT viewers, image viewers, and office software. The project does not determine whether an application supports a particular action, so the final behavior depends on that application's own mouse handling.
 
@@ -128,8 +130,9 @@ Test these actions in order:
 - Hold the left palm open for about 1000ms; it should keep printing `scroll up`.
 - Hold the right palm open for about 1000ms; it should keep printing `scroll down`.
 - Hold the right thumb sideways for about 500ms; the terminal should print one `left click`. Holding it must not repeat the click.
-- Hold the right index finger up for about 500ms; the preview `POINTER` state should become `fine`.
-- Make a left fist while moving; `LEFT FIST` should become `True` and `POINTER` should immediately become `idle`.
+- Pinch the right thumb and index finger for about 500ms; the preview `POINTER` state should become `fine`, and separating them should stop movement.
+- In fine mode, move the pinch point to all four camera edges; the cursor should stop at the matching edge of the active display.
+- Make a fist with either hand; `FIST STOP` should become `True` and all actions should stop immediately.
 
 Only continue to live input after dry-run output is stable.
 
@@ -182,7 +185,7 @@ python -m hand_mouse --live \
   --scroll-stable-time 1.00 \
   --scroll-repeat-interval 0.25 \
   --click-stable-time 0.50 \
-  --pointer-stable-time 0.50 \
+  --pinch-stable-time 0.50 \
   --fine-sensitivity 0.35 \
   --cursor-max-gain 3.00 \
   --cursor-acceleration-speed 1.00 \

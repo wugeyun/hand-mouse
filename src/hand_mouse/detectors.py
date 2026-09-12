@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 
@@ -78,6 +77,20 @@ def is_index_up(points: np.ndarray) -> bool:
     return is_index_pointing(points) and points[8, 1] < points[6, 1] - 0.015
 
 
+def is_thumb_index_pinch(points: np.ndarray, box_scale: float, threshold: float = 0.45) -> bool:
+    """Return True when the thumb and index fingertips are close relative to the hand."""
+    wrist = points[0]
+    index_reaches_out = distance(points[8], wrist) > distance(points[6], wrist) * 1.02
+    thumb_reaches_out = distance(points[4], wrist) > distance(points[3], wrist) * 1.02
+    fingertips_touch = distance(points[4], points[8]) <= max(box_scale, 1e-4) * threshold
+    return index_reaches_out and thumb_reaches_out and fingertips_touch
+
+
+def pinch_point(points: np.ndarray) -> np.ndarray:
+    """Return the normalized midpoint between the thumb and index fingertips."""
+    return (points[4, :2] + points[8, :2]) * 0.5
+
+
 def is_index_motion_ready(points: np.ndarray, min_straightness: float = 0.85) -> bool:
     """Allow cursor updates only while the index finger remains straight."""
     if not is_index_pointing(points):
@@ -99,10 +112,16 @@ class HandPose:
     finger_count: int = 0
     thumb_horizontal: bool = False
     fist: bool = False
-    handedness: Optional[str] = None
+    pinch: bool = False
+    handedness: str | None = None
 
 
-def make_pose(hand_landmarks, handedness: Optional[str] = None) -> HandPose:
+def is_emergency_fist(hand: HandPose) -> bool:
+    """Return True for a fist that is not another explicit hand gesture."""
+    return hand.fist and not hand.pinch and not hand.thumb_horizontal
+
+
+def make_pose(hand_landmarks, handedness: str | None = None) -> HandPose:
     landmarks = getattr(hand_landmarks, "landmark", hand_landmarks)
     points = np.array(
         [[landmark.x, landmark.y, landmark.z] for landmark in landmarks],
@@ -112,6 +131,7 @@ def make_pose(hand_landmarks, handedness: Optional[str] = None) -> HandPose:
     width = float(points[:, 0].max() - points[:, 0].min())
     height = float(points[:, 1].max() - points[:, 1].min())
     box_scale = max(math.sqrt(max(width * height, 0.0)), 1e-4)
+    pinch = is_thumb_index_pinch(points, box_scale)
     return HandPose(
         points=points,
         center=center,
@@ -119,6 +139,7 @@ def make_pose(hand_landmarks, handedness: Optional[str] = None) -> HandPose:
         finger_count=count_extended_fingers(points),
         thumb_horizontal=is_horizontal_thumb(points),
         fist=is_fist(points),
+        pinch=pinch,
         handedness=handedness,
     )
 
@@ -129,7 +150,7 @@ class HorizontalThumbClickDetector:
     def __init__(self, stable_time: float = 0.5) -> None:
         self.stable_time = stable_time
         self.active = False
-        self.candidate_since: Optional[float] = None
+        self.candidate_since: float | None = None
 
     def reset(self) -> None:
         self.active = False
@@ -156,10 +177,10 @@ class OpenPalmScrollDetector:
     def __init__(self, stable_time: float = 1.0, repeat_interval: float = 0.25) -> None:
         self.stable_time = stable_time
         self.repeat_interval = repeat_interval
-        self.active_hand: Optional[str] = None
-        self.candidate_hand: Optional[str] = None
-        self.candidate_since: Optional[float] = None
-        self.last_scroll: Optional[float] = None
+        self.active_hand: str | None = None
+        self.candidate_hand: str | None = None
+        self.candidate_since: float | None = None
+        self.last_scroll: float | None = None
 
     def reset(self) -> None:
         self.active_hand = None
@@ -167,7 +188,10 @@ class OpenPalmScrollDetector:
         self.candidate_since = None
         self.last_scroll = None
 
-    def update(self, finger_count: int, handedness: Optional[str], now: float) -> int:
+    def update(self, finger_count: int, handedness: str | None, now: float, pinch: bool = False) -> int:
+        if pinch:
+            self.reset()
+            return 0
         if finger_count != 5 or handedness not in ("left", "right"):
             self.reset()
             return 0

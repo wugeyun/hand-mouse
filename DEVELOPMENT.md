@@ -17,7 +17,7 @@
 ```text
 src/hand_mouse/
   cli.py         # 摄像头循环和命令行参数
-  controller.py  # PyAutoGUI 输入事件和平台修饰键
+  controller.py  # PyAutoGUI 输入事件、显示器边界和平台修饰键
   detectors.py   # 纯几何/时序手势检测器
   tracker.py     # MediaPipe Tasks API 和模型缓存
 tests/
@@ -35,7 +35,10 @@ run_hand_mouse.py # 未安装项目时的源码入口
 
 - `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定 1000ms 后返回 `1` 并按间隔持续返回，右手张开稳定 1000ms 后返回 `-1` 并按间隔持续返回；手掌收起后停止。
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)`：右手拇指横向姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开该姿态后再次进入才会重新触发。
-- `PointerModeDetector.update(hands, now)`：右手食指向上稳定后进入精细模式；左手握拳时立即返回 `idle`，右手食指折起后同样退出。
+- `PinchPointerDetector.update(hands, now)`：右手拇指和食指捏合稳定后进入精细模式；分开后退出；整只右手暂时丢失时保留状态，由局部指尖追踪器决定是否继续。
+- `PinchPointTracker`：在捏合进入后分别追踪拇指尖和食指尖，整只手关键点暂时丢失时输出两个指尖的中点。
+- `CursorMapper`：将捏合中点的归一化摄像头坐标映射到进入精细模式时鼠标所在显示器的完整边界；进入时保留当前鼠标位置并平滑消除初始偏差，当前模式不会自动切换显示器。
+- 任意一只手的拳头都会触发全局急停，重置滚动、点击、捏合状态和局部追踪器。
 - `InputController` 是唯一负责发送真实输入事件的类。检测器和单元测试不能直接调用 PyAutoGUI。
 
 ## 本地开发
@@ -74,14 +77,14 @@ python -m hand_mouse --live
 - `--scroll-stable-time`：张开手掌持续多久后确认滚动。
 - `--scroll-repeat-interval`：连续滚动事件之间的间隔。
 - `--click-stable-time`：右手拇指横向姿态持续多久后确认左键。
-- `--pointer-stable-time`：食指指针姿态持续多久后进入鼠标模式。
-- `--cursor-smoothing`：每帧位移的平滑系数。
-- `--fine-sensitivity`：慢速移动时的基础增益。
-- `--cursor-max-gain`：快速移动时的最大增益。
+- `--pointer-stable-time` / `--pinch-stable-time`：右手拇指和食指捏合持续多久后进入鼠标模式，默认 500ms。
+- `--cursor-smoothing`：摄像头绝对目标位置的平滑系数。
+- `--fine-sensitivity`：低速时鼠标跟随目标的基础比例。
+- `--cursor-max-gain`：高速时鼠标跟随目标的最大比例。
 - `--cursor-acceleration-speed`：达到最大增益时的归一化手部速度。
 - `--cursor-deadzone`：忽略静止抖动的最小归一化位移。
 
-指针增益使用平方曲线：`base_gain + (max_gain - base_gain) * speed_ratio^2`。`speed_ratio` 限制在 `0..1`，因此快速动作可以跨越屏幕，慢速动作仍保留精细控制。
+跟随比例使用平方曲线：`base_gain + (max_gain - base_gain) * speed_ratio^2`，并限制在 `0..1`。进入精细模式时，映射器记录当前鼠标位置与手指绝对目标之间的偏差，在短暂过渡期内逐步消除该偏差，因此不会在识别瞬间跳到目标位置。显示器边界来自完整显示器范围，而不是排除菜单栏、Dock 或任务栏后的工作区。
 
 误触发时提高 `--scroll-stable-time`，并增加光照或扩大摄像头取景区域。
 

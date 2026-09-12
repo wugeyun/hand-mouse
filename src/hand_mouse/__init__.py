@@ -1,3 +1,3 @@
 """Coarse webcam gesture control for general desktop input workflows."""
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"

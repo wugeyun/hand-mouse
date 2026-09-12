@@ -1,17 +1,26 @@
 import numpy as np
 
-from hand_mouse.controller import InputController
+from hand_mouse.controller import DisplayBounds, InputController, select_display
 from hand_mouse.detectors import (
     HandPose,
     HorizontalThumbClickDetector,
     OpenPalmScrollDetector,
     count_extended_fingers,
+    is_emergency_fist,
     is_fist,
     is_horizontal_thumb,
     is_index_motion_ready,
     is_index_pointing,
+    is_thumb_index_pinch,
+    pinch_point,
 )
-from hand_mouse.pointer import POINTER_FINE, POINTER_IDLE, CursorMapper, PointerModeDetector
+from hand_mouse.pointer import (
+    POINTER_FINE,
+    POINTER_IDLE,
+    CursorMapper,
+    PinchPointerDetector,
+    PinchPointTracker,
+)
 
 
 def pose(center: tuple[float, float], scale: float = 0.2, finger_count: int = 0) -> HandPose:
@@ -61,6 +70,12 @@ def fist_pose(handedness: str) -> HandPose:
     )
 
 
+def pinching_pose(handedness: str) -> HandPose:
+    hand = pointing_pose(handedness)
+    hand.points[4, :2] = hand.points[8, :2]
+    return hand
+
+
 def test_open_palms_map_left_and_right_hands_to_fixed_scroll_directions() -> None:
     detector = OpenPalmScrollDetector(stable_time=1.0, repeat_interval=0.25)
     assert detector.update(5, "left", 0.0) == 0
@@ -84,19 +99,19 @@ def test_horizontal_thumb_state_emits_one_left_click_until_released() -> None:
     assert detector.update(True, 1.3)
 
 
-def test_right_index_arms_fine_pointer_and_left_fist_stops_it() -> None:
-    detector = PointerModeDetector(stable_time=0.5)
-    right = pointing_pose("right")
-    left_fist = fist_pose("left")
+def test_right_pinch_arms_fine_pointer_and_release_stops_it() -> None:
+    detector = PinchPointerDetector(stable_time=0.5)
+    right = pinching_pose("right")
+    released = pointing_pose("right")
+    assert is_thumb_index_pinch(right.points, right.box_scale)
+    assert np.allclose(pinch_point(right.points), right.points[4, :2])
     assert detector.update([right], 0.0) == POINTER_IDLE
     assert detector.update([right], 0.4) == POINTER_IDLE
     assert detector.update([right], 0.5) == POINTER_FINE
-    assert is_fist(left_fist.points)
-    assert detector.update([right, left_fist], 0.6) == POINTER_IDLE
-    assert detector.update([right, left_fist], 1.0) == POINTER_IDLE
-    assert detector.update([right], 1.1) == POINTER_IDLE
-    assert detector.update([right], 1.6) == POINTER_FINE
-    assert detector.update([], 1.7) == POINTER_IDLE
+    assert detector.update([released], 0.6) == POINTER_IDLE
+    assert detector.update([right], 1.0) == POINTER_IDLE
+    assert detector.update([right], 1.5) == POINTER_FINE
+    assert detector.update([], 1.7) == POINTER_FINE
 
 
 def test_cursor_acceleration_moves_farther_for_faster_motion() -> None:
@@ -111,10 +126,10 @@ def test_cursor_acceleration_moves_farther_for_faster_motion() -> None:
         acceleration_speed=1.0,
         deadzone=0.0,
     )
-    slow_mapper.set_mode(POINTER_FINE, base, (500, 500), 0.0)
+    slow_mapper.set_mode(POINTER_FINE, base.points[8, :2], (500, 500), 0.0)
     slow = pointing_pose("right")
     slow.points[8, :2] = (0.51, 0.5)
-    slow_position = slow_mapper.update(slow, 0.1)
+    slow_position = slow_mapper.update(slow.points[8, :2], 0.1)
 
     fast_mapper = CursorMapper(
         (1000, 1000),
@@ -124,14 +139,105 @@ def test_cursor_acceleration_moves_farther_for_faster_motion() -> None:
         acceleration_speed=1.0,
         deadzone=0.0,
     )
-    fast_mapper.set_mode(POINTER_FINE, base, (500, 500), 0.0)
+    fast_mapper.set_mode(POINTER_FINE, base.points[8, :2], (500, 500), 0.0)
     fast = pointing_pose("right")
     fast.points[8, :2] = (0.51, 0.5)
-    fast_position = fast_mapper.update(fast, 0.01)
+    fast_position = fast_mapper.update(fast.points[8, :2], 0.01)
 
     assert slow_position is not None
     assert fast_position is not None
     assert fast_position[0] - 500 > (slow_position[0] - 500) * 4
+
+
+def test_cursor_mapper_maps_camera_edges_to_the_active_display() -> None:
+    display = DisplayBounds(100, -50, 1000, 800)
+    base = pointing_pose("right")
+    base.points[8, :2] = (0.25, 0.25)
+    mapper = CursorMapper(
+        display,
+        smoothing=1.0,
+        fine_sensitivity=1.0,
+        max_gain=1.0,
+        deadzone=0.0,
+        transition_duration=0.1,
+    )
+    mapper.set_mode(POINTER_FINE, base.points[8, :2], (600, 300), 0.0)
+
+    top_left = pointing_pose("right")
+    top_left.points[8, :2] = (0.0, 0.0)
+    first_position = mapper.update(top_left.points[8, :2], 0.01)
+    assert first_position is not None
+    assert first_position[0] > display.x
+    assert first_position[1] > display.y
+
+    assert mapper.update(top_left.points[8, :2], 0.11) == (display.x, display.y)
+
+    bottom_right = pointing_pose("right")
+    bottom_right.points[8, :2] = (1.0, 1.0)
+    assert mapper.update(bottom_right.points[8, :2], 0.21) == (
+        display.x + display.width - 1,
+        display.y + display.height - 1,
+    )
+
+
+def test_select_display_uses_the_display_containing_the_cursor() -> None:
+    left = DisplayBounds(0, 0, 1000, 800, is_primary=True)
+    right = DisplayBounds(1000, 100, 1200, 900)
+
+    assert select_display((100, 100), (left, right)) == left
+    assert select_display((1100, 200), (left, right)) == right
+    assert select_display((1000, 50), (left, right)) == left
+
+
+def test_any_fist_is_an_emergency_stop_but_a_pinch_is_not() -> None:
+    left_fist = fist_pose("left")
+    pinching = pinching_pose("right")
+    pinching.fist = True
+    pinching.pinch = True
+    horizontal_thumb = fist_pose("right")
+    horizontal_thumb.thumb_horizontal = True
+
+    assert is_fist(left_fist.points)
+    assert is_emergency_fist(left_fist)
+    assert not is_emergency_fist(pinching)
+    assert not is_emergency_fist(horizontal_thumb)
+
+
+def test_open_palm_scroll_is_suppressed_while_pinching() -> None:
+    detector = OpenPalmScrollDetector(stable_time=1.0, repeat_interval=0.25)
+
+    assert detector.update(5, "right", 0.0, pinch=True) == 0
+    assert detector.update(5, "right", 1.0, pinch=True) == 0
+    assert detector.update(5, "right", 1.1, pinch=False) == 0
+
+
+def test_local_pinch_tracker_returns_the_moving_midpoint(monkeypatch) -> None:
+    class FakeTracker:
+        def __init__(self) -> None:
+            self.box = None
+
+        def init(self, _frame, box) -> bool:
+            self.box = box
+            return True
+
+        def update(self, frame):
+            shift = float(frame[0, 0, 0])
+            x, y, width, height = self.box
+            return True, (x + shift, y, width, height)
+
+    monkeypatch.setattr(PinchPointTracker, "_create_tracker", staticmethod(FakeTracker))
+    frame = np.zeros((100, 100, 3), dtype=np.uint8)
+    points = np.zeros((21, 3), dtype=np.float32)
+    points[4, :2] = (0.40, 0.50)
+    points[8, :2] = (0.45, 0.50)
+    tracker = PinchPointTracker()
+
+    assert tracker.start(frame, points, box_scale=0.2)
+    frame[0, 0, 0] = 5
+    midpoint = tracker.update(frame)
+
+    assert midpoint is not None
+    assert np.allclose(midpoint, (0.425 + 5 / 99, 0.5), atol=0.01)
 
 
 def test_count_extended_fingers_distinguishes_four_and_five() -> None:
