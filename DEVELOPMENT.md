@@ -35,11 +35,12 @@ run_hand_mouse.py # 未安装项目时的源码入口
 
 - `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定 1000ms 后返回 `1` 并按间隔持续返回，右手张开稳定 1000ms 后返回 `-1` 并按间隔持续返回；手掌收起后停止。
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)`：右手拇指横向姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开该姿态后再次进入才会重新触发。
+- `PeaceSignClickDetector.update(peace_sign, now)`：右手比耶姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；松开后再次进入才会重新触发右键。
 - `PinchPointerDetector.update(hands, now)`：右手拇指和食指捏合稳定后进入精细模式；分开后退出；整只右手暂时丢失时保留状态，由局部指尖追踪器决定是否继续。
 - `PinchPointTracker`：在捏合进入后分别追踪拇指尖和食指尖，整只手关键点暂时丢失时输出两个指尖的中点。
 - `CursorMapper`：将捏合中点的归一化摄像头坐标映射到进入精细模式时鼠标所在显示器的完整边界；进入时保留当前鼠标位置并平滑消除初始偏差，当前模式不会自动切换显示器。
 - 任意一只手的拳头都会触发全局急停，重置滚动、点击、捏合状态和局部追踪器。
-- `InputController` 是唯一负责发送真实输入事件的类。检测器和单元测试不能直接调用 PyAutoGUI。
+- `InputController` 是唯一负责发送真实输入事件的类，提供左键和右键发送方法。检测器和单元测试不能直接调用 PyAutoGUI。
 
 ## 本地开发
 
@@ -92,7 +93,7 @@ python -m hand_mouse --live
 
 如果需要替换 PyAutoGUI：
 
-1. 在 `controller.py` 中实现相同的 `scroll` 和 `left_click` 方法。
+1. 在 `controller.py` 中实现相同的 `scroll`、`left_click` 和 `right_click` 方法。
 2. 保持 `--live` 作为真实输入的唯一开关。
 3. 在没有桌面环境的 CI 中保持可导入、可测试。
 4. 为平台权限、焦点窗口和失败恢复补充文档。
@@ -102,7 +103,7 @@ python -m hand_mouse --live
 - 更新 `pyproject.toml`、`src/hand_mouse/__init__.py` 和 `CHANGELOG.md` 版本。
 - 运行 `ruff check .` 和 `pytest`。
 - 在至少一个目标平台上完成 dry-run 摄像头测试。
-- 在目标浏览器、文件管理器、办公软件或其他桌面应用中分别验证滚动和左键单击。
+- 在目标浏览器、文件管理器、办公软件或其他桌面应用中分别验证滚动、左键单击和右键单击。
 - 验证没有 `--live` 时不会发送系统输入事件。
 - 检查依赖和新增文件的许可证。
 - 创建 Git tag，并在 GitHub Release 中记录已验证的平台和已知限制。

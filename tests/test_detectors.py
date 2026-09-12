@@ -5,12 +5,14 @@ from hand_mouse.detectors import (
     HandPose,
     HorizontalThumbClickDetector,
     OpenPalmScrollDetector,
+    PeaceSignClickDetector,
     count_extended_fingers,
     is_emergency_fist,
     is_fist,
     is_horizontal_thumb,
     is_index_motion_ready,
     is_index_pointing,
+    is_peace_sign,
     is_thumb_index_pinch,
     pinch_point,
 )
@@ -76,6 +78,31 @@ def pinching_pose(handedness: str) -> HandPose:
     return hand
 
 
+def peace_pose(handedness: str) -> HandPose:
+    points = np.zeros((21, 3), dtype=np.float32)
+    points[0] = (0.50, 0.80, 0.0)
+    points[5] = (0.43, 0.70, 0.0)
+    points[6] = (0.42, 0.58, 0.0)
+    points[8] = (0.38, 0.22, 0.0)
+    points[9] = (0.55, 0.70, 0.0)
+    points[10] = (0.57, 0.56, 0.0)
+    points[12] = (0.64, 0.18, 0.0)
+    points[13] = (0.66, 0.70, 0.0)
+    points[14] = (0.66, 0.75, 0.0)
+    points[16] = (0.58, 0.72, 0.0)
+    points[17] = (0.73, 0.72, 0.0)
+    points[18] = (0.73, 0.78, 0.0)
+    points[20] = (0.66, 0.74, 0.0)
+    points[3] = (0.42, 0.78, 0.0)
+    points[4] = (0.34, 0.72, 0.0)
+    return HandPose(
+        points=points,
+        center=np.array((0.5, 0.5), dtype=np.float32),
+        box_scale=0.4,
+        handedness=handedness,
+    )
+
+
 def test_open_palms_map_left_and_right_hands_to_fixed_scroll_directions() -> None:
     detector = OpenPalmScrollDetector(stable_time=1.0, repeat_interval=0.25)
     assert detector.update(5, "left", 0.0) == 0
@@ -112,6 +139,19 @@ def test_right_pinch_arms_fine_pointer_and_release_stops_it() -> None:
     assert detector.update([right], 1.0) == POINTER_IDLE
     assert detector.update([right], 1.5) == POINTER_FINE
     assert detector.update([], 1.7) == POINTER_FINE
+
+
+def test_right_peace_sign_emits_one_right_click_until_released() -> None:
+    detector = PeaceSignClickDetector(stable_time=0.5)
+    peace = peace_pose("right")
+    assert is_peace_sign(peace.points, peace.box_scale)
+    assert not detector.update(True, 0.0)
+    assert not detector.update(True, 0.4)
+    assert detector.update(True, 0.5)
+    assert not detector.update(True, 0.6)
+    assert not detector.update(False, 0.7)
+    assert not detector.update(True, 1.2)
+    assert detector.update(True, 1.7)
 
 
 def test_cursor_acceleration_moves_farther_for_faster_motion() -> None:
@@ -303,4 +343,5 @@ def test_open_palm_does_not_enter_index_pointer_mode() -> None:
 def test_dry_run_controller_never_needs_to_send_input() -> None:
     controller = InputController(live=False, scroll_amount=1)
     controller.left_click()
+    controller.right_click()
     controller.scroll(1)

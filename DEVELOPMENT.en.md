@@ -35,11 +35,12 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 
 - `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after 1000ms of a stable left open palm and repeats at the configured interval; it returns `-1` for a stable right open palm. Closing the palm stops scrolling.
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)` returns `True` after `--click-stable-time` seconds of a stable right horizontal-thumb pose and `False` while the state is held or for other states. Leaving the pose is required before another click can fire.
+- `PeaceSignClickDetector.update(peace_sign, now)` returns `True` after `--click-stable-time` seconds of a stable right-hand V sign and `False` while the state is held or for other states. Leaving the pose is required before another right click can fire.
 - `PinchPointerDetector.update(hands, now)` arms fine mode after a stable right thumb-index pinch. Separating the fingertips exits; a temporarily missing right hand remains active while the local tracker can continue.
 - `PinchPointTracker` tracks the thumb and index fingertips independently after pinch activation and supplies their midpoint when the full hand landmarks disappear.
 - `CursorMapper` maps the normalized pinch midpoint to the full bounds of the display containing the cursor when fine mode starts. It preserves the current cursor position, then smoothly removes the initial offset; the active mode does not switch displays automatically.
 - A fist with either hand is a global emergency stop that resets scrolling, clicking, pinch state, and local tracking.
-- `InputController` is the only class allowed to send real input events. Detectors and unit tests must not call PyAutoGUI directly.
+- `InputController` is the only class allowed to send real input events and provides left- and right-click methods. Detectors and unit tests must not call PyAutoGUI directly.
 
 ## Local development
 
@@ -92,7 +93,7 @@ For accidental activations, increase `--scroll-stable-time` and improve lighting
 
 To replace PyAutoGUI:
 
-1. Implement the same `scroll` and `left_click` methods in `controller.py`.
+1. Implement the same `scroll`, `left_click`, and `right_click` methods in `controller.py`.
 2. Keep `--live` as the only switch that enables real system input.
 3. Keep the backend importable and testable in headless CI.
 4. Document platform permissions, focus-window behavior, and failure recovery.
@@ -102,7 +103,7 @@ To replace PyAutoGUI:
 - Update the version in `pyproject.toml`, `src/hand_mouse/__init__.py`, and `CHANGELOG.md`.
 - Run `ruff check .` and `pytest`.
 - Complete a dry-run camera test on at least one target platform.
-- Verify scroll and left click in target browsers, file managers, office software, or other desktop applications.
+- Verify scroll, left click, and right click in target browsers, file managers, office software, or other desktop applications.
 - Verify that no system input is sent without `--live`.
 - Check licenses for dependencies and new files.
 - Create a Git tag and describe verified platforms and known limitations in the GitHub Release.

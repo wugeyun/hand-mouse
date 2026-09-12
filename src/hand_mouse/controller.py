@@ -76,6 +76,9 @@ class InputController:
     def left_click(self) -> None:
         self._emit("left click", lambda: self.pyautogui.click())
 
+    def right_click(self) -> None:
+        self._emit("right click", lambda: self.pyautogui.rightClick())
+
     def _fallback_display(self) -> DisplayBounds:
         if self.pyautogui is None:
             return DisplayBounds(0, 0, 1920, 1080, is_primary=True)

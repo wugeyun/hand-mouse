@@ -1,6 +1,6 @@
 # Hand Mouse
 
-A coarse webcam gesture input controller for general desktop applications. It intentionally recognizes large movements instead of fine-grained finger poses, so a small set of gestures can replace common wheel and left-click actions.
+A coarse webcam gesture input controller for general desktop applications. It intentionally recognizes large movements instead of fine-grained finger poses, so a small set of gestures can replace common wheel and mouse-click actions.
 
 [中文 README](README.md) | [Development Guide](DEVELOPMENT.en.md) | [Contributing](CONTRIBUTING.en.md)
 
@@ -15,6 +15,7 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 | Hold the left palm open | Continuously scroll page up | Starts after about 1000ms and repeats while held |
 | Hold the right palm open | Continuously scroll page down | Starts after about 1000ms and repeats while held |
 | Extend the right thumb sideways | Left click | Other fingers folded; fires once after about 500ms |
+| Make a V sign with the right hand | Right click | Index and middle extended, other long fingers folded; fires once after about 500ms |
 | Pinch the right thumb and index finger | Fine mouse movement | Arms after about 500ms; the pinch midpoint controls the cursor until release |
 | Make a fist with either hand | Global emergency stop | Immediately stops scrolling, clicking, and pointer movement |
 
@@ -130,6 +131,7 @@ Test these actions in order:
 - Hold the left palm open for about 1000ms; it should keep printing `scroll up`.
 - Hold the right palm open for about 1000ms; it should keep printing `scroll down`.
 - Hold the right thumb sideways for about 500ms; the terminal should print one `left click`. Holding it must not repeat the click.
+- Hold a right-hand V sign for about 500ms; the terminal should print one `right click`. Holding it must not repeat the click.
 - Pinch the right thumb and index finger for about 500ms; the preview `POINTER` state should become `fine`, and separating them should stop movement.
 - In fine mode, move the pinch point to all four camera edges; the cursor should stop at the matching edge of the active display.
 - Make a fist with either hand; `FIST STOP` should become `True` and all actions should stop immediately.
@@ -144,7 +146,7 @@ Prepare a safe target application such as a normal browser page, a temporary fol
 python run_hand_mouse.py --live --no-preview
 ```
 
-Switch to the target application after the process starts and make sure its window is focused before testing scroll and left clicks. Events are sent to the focused window; the project does not determine whether the target supports a particular action.
+Switch to the target application after the process starts and make sure its window is focused before testing scroll, left clicks, and right clicks. Events are sent to the focused window; the project does not determine whether the target supports a particular action.
 
 Return to the terminal and press `Ctrl+C` when testing is finished.
 

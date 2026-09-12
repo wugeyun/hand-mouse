@@ -77,6 +77,26 @@ def is_index_up(points: np.ndarray) -> bool:
     return is_index_pointing(points) and points[8, 1] < points[6, 1] - 0.015
 
 
+def is_peace_sign(points: np.ndarray, box_scale: float, separation_ratio: float = 0.25) -> bool:
+    """Return True for a V sign: index and middle extended, ring and pinky folded."""
+    wrist = points[0]
+    index_extended = (
+        distance(points[8], wrist) > distance(points[6], wrist) * 1.05
+        and finger_straightness(points, 5, 6, 8) >= 0.75
+    )
+    middle_extended = (
+        distance(points[12], wrist) > distance(points[10], wrist) * 1.05
+        and finger_straightness(points, 9, 10, 12) >= 0.75
+    )
+    folded_back = all(
+        distance(points[tip_index], wrist) < distance(points[pip_index], wrist) * 1.35
+        and finger_straightness(points, mcp_index, pip_index, tip_index) < 0.75
+        for mcp_index, pip_index, tip_index in ((13, 14, 16), (17, 18, 20))
+    )
+    separated = distance(points[8], points[12]) >= max(box_scale, 1e-4) * separation_ratio
+    return index_extended and middle_extended and folded_back and separated
+
+
 def is_thumb_index_pinch(points: np.ndarray, box_scale: float, threshold: float = 0.45) -> bool:
     """Return True when the thumb and index fingertips are close relative to the hand."""
     wrist = points[0]
@@ -113,6 +133,7 @@ class HandPose:
     thumb_horizontal: bool = False
     fist: bool = False
     pinch: bool = False
+    peace_sign: bool = False
     handedness: str | None = None
 
 
@@ -132,6 +153,7 @@ def make_pose(hand_landmarks, handedness: str | None = None) -> HandPose:
     height = float(points[:, 1].max() - points[:, 1].min())
     box_scale = max(math.sqrt(max(width * height, 0.0)), 1e-4)
     pinch = is_thumb_index_pinch(points, box_scale)
+    peace_sign = is_peace_sign(points, box_scale)
     return HandPose(
         points=points,
         center=center,
@@ -140,6 +162,7 @@ def make_pose(hand_landmarks, handedness: str | None = None) -> HandPose:
         thumb_horizontal=is_horizontal_thumb(points),
         fist=is_fist(points),
         pinch=pinch,
+        peace_sign=peace_sign,
         handedness=handedness,
     )
 
@@ -158,6 +181,33 @@ class HorizontalThumbClickDetector:
 
     def update(self, thumb_horizontal: bool, now: float) -> bool:
         if not thumb_horizontal:
+            self.reset()
+            return False
+        if self.active:
+            return False
+        if self.candidate_since is None:
+            self.candidate_since = now
+            return False
+        if now - self.candidate_since < self.stable_time:
+            return False
+        self.active = True
+        return True
+
+
+class PeaceSignClickDetector:
+    """Emit one right click after a stable right-hand V sign."""
+
+    def __init__(self, stable_time: float = 0.5) -> None:
+        self.stable_time = stable_time
+        self.active = False
+        self.candidate_since: float | None = None
+
+    def reset(self) -> None:
+        self.active = False
+        self.candidate_since = None
+
+    def update(self, peace_sign: bool, now: float) -> bool:
+        if not peace_sign:
             self.reset()
             return False
         if self.active:

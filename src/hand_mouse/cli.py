@@ -64,7 +64,7 @@ def draw_status(
     fist_stop = any(is_emergency_fist(hand) for hand in hands)
     cv2.putText(
         frame,
-        f"MODE: {mode}  HANDS: {len(hands)}  HAND: {hands[0].handedness if len(hands) == 1 else '-'}  PINCH: {pinch_state}  THUMB SIDE: {hands[0].thumb_horizontal if len(hands) == 1 else '-'}",
+        f"MODE: {mode}  HANDS: {len(hands)}  HAND: {hands[0].handedness if len(hands) == 1 else '-'}  PINCH: {pinch_state}  PEACE: {hands[0].peace_sign if len(hands) == 1 else '-'}  THUMB SIDE: {hands[0].thumb_horizontal if len(hands) == 1 else '-'}",
         (20, 32),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
@@ -91,7 +91,7 @@ def draw_status(
     )
     cv2.putText(
         frame,
-        "right thumb side: left click | left palm: above | right palm: below",
+        "right thumb side: left click | right V: right click | palms: scroll",
         (20, 116),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.52,
@@ -113,6 +113,7 @@ def run(args: argparse.Namespace) -> int:
     from .detectors import (
         HorizontalThumbClickDetector,
         OpenPalmScrollDetector,
+        PeaceSignClickDetector,
         is_emergency_fist,
         is_thumb_index_pinch,
         pinch_point,
@@ -149,6 +150,7 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     click_detector = HorizontalThumbClickDetector(stable_time=args.click_stable_time)
+    right_click_detector = PeaceSignClickDetector(stable_time=args.click_stable_time)
     scroll_detector = OpenPalmScrollDetector(
         stable_time=args.scroll_stable_time,
         repeat_interval=args.scroll_repeat_interval,
@@ -184,6 +186,7 @@ def run(args: argparse.Namespace) -> int:
                     pointer_detector.reset()
                     pinch_tracker.reset()
                     click_detector.reset()
+                    right_click_detector.reset()
                     scroll_detector.reset()
                     pointer_mode = POINTER_IDLE
                     if cursor_mapper.mode != POINTER_IDLE:
@@ -249,6 +252,10 @@ def run(args: argparse.Namespace) -> int:
                     if click_detector.update(click_pose, now):
                         controller.left_click()
                         last_action = "left click"
+                    right_click_pose = pose.handedness == "right" and pose.peace_sign
+                    if right_click_detector.update(right_click_pose, now):
+                        controller.right_click()
+                        last_action = "right click"
                     scroll_event = scroll_detector.update(
                         pose.finger_count,
                         pose.handedness,
@@ -260,6 +267,7 @@ def run(args: argparse.Namespace) -> int:
                         last_action = "scroll up" if scroll_event > 0 else "scroll down"
                 else:
                     click_detector.reset()
+                    right_click_detector.reset()
                     scroll_detector.reset()
 
                 if not args.no_preview:
