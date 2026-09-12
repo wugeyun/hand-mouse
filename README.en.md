@@ -12,11 +12,11 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 
 | Gesture | Output | Notes |
 | --- | --- | --- |
-| Hold the left palm open | Scroll page up | Fires once after about 500ms |
-| Hold the right palm open | Scroll page down | Fires once after about 500ms |
+| Hold the left palm open | Continuously scroll page up | Starts after about 1000ms and repeats while held |
+| Hold the right palm open | Continuously scroll page down | Starts after about 1000ms and repeats while held |
 | Thumbs up | Left click | Requires about 300ms of stability by default; fires once per entry |
 
-Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Holding an open palm does not repeat the action; close the hand or remove it from the frame before triggering again.
+Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Scrolling starts after 1000ms of stability and repeats while the palm is held open; closing the hand or removing it from the frame stops scrolling immediately.
 
 Events are sent to the currently focused application. Any target that responds to standard mouse events can use the controller, including browsers, macOS Finder, Windows File Explorer, PPT viewers, image viewers, and office software. The project does not determine whether an application supports a particular action, so the final behavior depends on that application's own mouse handling.
 
@@ -119,8 +119,8 @@ python run_hand_mouse.py
 
 Test these actions in order:
 
-- Hold the left palm open for about 500ms; it should print `scroll up` once.
-- Hold the right palm open for about 500ms; it should print `scroll down` once.
+- Hold the left palm open for about 1000ms; it should keep printing `scroll up`.
+- Hold the right palm open for about 1000ms; it should keep printing `scroll down`.
 - Hold a thumbs-up pose; the terminal should print one `left click` after about 500ms. Holding it must not repeat the click.
 
 Only continue to live input after dry-run output is stable.
@@ -171,7 +171,8 @@ Useful tuning options:
 ```bash
 python -m hand_mouse --live \
   --scroll-amount 4 \
-  --scroll-stable-time 0.50 \
+  --scroll-stable-time 1.00 \
+  --scroll-repeat-interval 0.25 \
   --click-stable-time 0.50
 ```
 

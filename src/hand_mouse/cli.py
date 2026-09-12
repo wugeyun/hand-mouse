@@ -24,7 +24,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_true", help="send real mouse events; default is dry-run")
     parser.add_argument("--no-preview", action="store_true", help="do not open the camera preview window")
     parser.add_argument("--scroll-amount", type=int, default=5)
-    parser.add_argument("--scroll-stable-time", type=float, default=0.5)
+    parser.add_argument("--scroll-stable-time", type=float, default=1.0)
+    parser.add_argument("--scroll-repeat-interval", type=float, default=0.25)
     parser.add_argument("--click-stable-time", type=float, default=0.3)
     return parser
 
@@ -105,7 +106,10 @@ def run(args: argparse.Namespace) -> int:
         return 1
 
     click_detector = ThumbUpClickDetector(stable_time=args.click_stable_time)
-    scroll_detector = OpenPalmScrollDetector(stable_time=args.scroll_stable_time)
+    scroll_detector = OpenPalmScrollDetector(
+        stable_time=args.scroll_stable_time,
+        repeat_interval=args.scroll_repeat_interval,
+    )
     last_action = ""
 
     start_time = time.monotonic()

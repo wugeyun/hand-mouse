@@ -95,25 +95,33 @@ class ThumbUpClickDetector:
 
 
 class OpenPalmScrollDetector:
-    """Scroll once for a stable left or right open palm."""
+    """Continuously scroll while a stable left or right open palm is held."""
 
-    def __init__(self, stable_time: float = 0.3) -> None:
+    def __init__(self, stable_time: float = 1.0, repeat_interval: float = 0.25) -> None:
         self.stable_time = stable_time
+        self.repeat_interval = repeat_interval
         self.active_hand: Optional[str] = None
         self.candidate_hand: Optional[str] = None
         self.candidate_since: Optional[float] = None
+        self.last_scroll: Optional[float] = None
 
     def reset(self) -> None:
         self.active_hand = None
         self.candidate_hand = None
         self.candidate_since = None
+        self.last_scroll = None
 
     def update(self, finger_count: int, handedness: Optional[str], now: float) -> int:
         if finger_count != 5 or handedness not in ("left", "right"):
             self.reset()
             return 0
         if self.active_hand == handedness:
+            if self.last_scroll is not None and now - self.last_scroll >= self.repeat_interval:
+                self.last_scroll = now
+                return 1 if handedness == "left" else -1
             return 0
+        if self.active_hand is not None and self.active_hand != handedness:
+            self.reset()
         if self.candidate_hand != handedness:
             self.candidate_hand = handedness
             self.candidate_since = now
@@ -121,4 +129,5 @@ class OpenPalmScrollDetector:
         if self.candidate_since is None or now - self.candidate_since < self.stable_time:
             return 0
         self.active_hand = handedness
+        self.last_scroll = now
         return 1 if handedness == "left" else -1

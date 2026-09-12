@@ -33,7 +33,7 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 
 ## Action contracts
 
-- `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after a stable left open palm for scroll up and `-1` after a stable right open palm for scroll down. Holding an open palm does not repeat the action.
+- `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after 1000ms of a stable left open palm and repeats at the configured interval; it returns `-1` for a stable right open palm. Closing the palm stops scrolling.
 - `ThumbUpClickDetector.update(thumbs_up, now)` returns `True` after `--click-stable-time` seconds of thumb-up stability and `False` while the state is held or for other states. Leaving thumb-up is required before another click can fire.
 - `InputController` is the only class allowed to send real input events. Detectors and unit tests must not call PyAutoGUI directly.
 
@@ -71,6 +71,7 @@ python -m hand_mouse --live
 Thresholds use normalized camera coordinates or relative projection sizes, so they are not tied to one resolution:
 
 - `--scroll-stable-time`: how long an open palm must remain stable before scrolling.
+- `--scroll-repeat-interval`: interval between continuous scroll events.
 - `--click-stable-time`: how long a thumbs-up pose must remain stable before left click.
 
 For accidental activations, increase `--scroll-stable-time` and improve lighting or enlarge the camera framing area.

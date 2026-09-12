@@ -33,7 +33,7 @@ run_hand_mouse.py # 未安装项目时的源码入口
 
 ## 动作契约
 
-- `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定后返回 `1` 表示向上滚动，右手张开稳定后返回 `-1` 表示向下滚动；保持手掌张开不会重复返回动作。
+- `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定 1000ms 后返回 `1` 并按间隔持续返回，右手张开稳定 1000ms 后返回 `-1` 并按间隔持续返回；手掌收起后停止。
 - `ThumbUpClickDetector.update(thumbs_up, now)`：拇指向上稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开拇指向上后再次进入才会重新触发。
 - `InputController` 是唯一负责发送真实输入事件的类。检测器和单元测试不能直接调用 PyAutoGUI。
 
@@ -71,6 +71,7 @@ python -m hand_mouse --live
 参数都以归一化摄像头坐标或相对投影大小表示，避免绑定固定分辨率：
 
 - `--scroll-stable-time`：张开手掌持续多久后确认滚动。
+- `--scroll-repeat-interval`：连续滚动事件之间的间隔。
 - `--click-stable-time`：拇指向上持续多久后确认左键。
 
 误触发时提高 `--scroll-stable-time`，并增加光照或扩大摄像头取景区域。

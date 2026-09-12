@@ -15,14 +15,15 @@ def pose(center: tuple[float, float], scale: float = 0.2, finger_count: int = 0)
 
 
 def test_open_palms_map_left_and_right_hands_to_fixed_scroll_directions() -> None:
-    detector = OpenPalmScrollDetector(stable_time=0.5)
+    detector = OpenPalmScrollDetector(stable_time=1.0, repeat_interval=0.25)
     assert detector.update(5, "left", 0.0) == 0
-    assert detector.update(5, "left", 0.4) == 0
-    assert detector.update(5, "left", 0.5) == 1
-    assert detector.update(5, "left", 0.6) == 0
-    assert detector.update(4, "left", 0.7) == 0
-    assert detector.update(5, "right", 0.8) == 0
-    assert detector.update(5, "right", 1.3) == -1
+    assert detector.update(5, "left", 0.9) == 0
+    assert detector.update(5, "left", 1.0) == 1
+    assert detector.update(5, "left", 1.1) == 0
+    assert detector.update(5, "left", 1.25) == 1
+    assert detector.update(4, "left", 1.4) == 0
+    assert detector.update(5, "right", 1.5) == 0
+    assert detector.update(5, "right", 2.5) == -1
 
 
 def test_thumb_up_state_emits_one_left_click_until_released() -> None:
