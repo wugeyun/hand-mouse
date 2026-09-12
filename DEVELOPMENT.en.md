@@ -34,7 +34,8 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 ## Action contracts
 
 - `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after 1000ms of a stable left open palm and repeats at the configured interval; it returns `-1` for a stable right open palm. Closing the palm stops scrolling.
-- `ThumbUpClickDetector.update(thumbs_up, now)` returns `True` after `--click-stable-time` seconds of thumb-up stability and `False` while the state is held or for other states. Leaving thumb-up is required before another click can fire.
+- `HorizontalThumbClickDetector.update(thumb_horizontal, now)` returns `True` after `--click-stable-time` seconds of a stable right horizontal-thumb pose and `False` while the state is held or for other states. Leaving the pose is required before another click can fire.
+- `PointerModeDetector.update(hands, now)` arms fine mode after a stable right index-up pose. A left fist returns `idle` immediately; folding the right index also exits pointer control.
 - `InputController` is the only class allowed to send real input events. Detectors and unit tests must not call PyAutoGUI directly.
 
 ## Local development
@@ -72,7 +73,10 @@ Thresholds use normalized camera coordinates or relative projection sizes, so th
 
 - `--scroll-stable-time`: how long an open palm must remain stable before scrolling.
 - `--scroll-repeat-interval`: interval between continuous scroll events.
-- `--click-stable-time`: how long a thumbs-up pose must remain stable before left click.
+- `--click-stable-time`: how long the right horizontal-thumb pose must remain stable before left click.
+- `--pointer-stable-time`: how long the pointer pose must remain stable before entering mouse mode.
+- `--cursor-smoothing`: smoothing factor for fine pointer movement.
+- `--fine-sensitivity`: relative movement sensitivity in fine mode.
 
 For accidental activations, increase `--scroll-stable-time` and improve lighting or enlarge the camera framing area.
 

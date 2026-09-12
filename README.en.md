@@ -14,9 +14,13 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 | --- | --- | --- |
 | Hold the left palm open | Continuously scroll page up | Starts after about 1000ms and repeats while held |
 | Hold the right palm open | Continuously scroll page down | Starts after about 1000ms and repeats while held |
-| Thumbs up | Left click | Requires about 300ms of stability by default; fires once per entry |
+| Extend the right thumb sideways | Left click | Other fingers folded; fires once after about 500ms |
+| Point the right index finger up | Fine mouse movement | Arms after about 500ms; the index controls the cursor |
+| Make a fist with the left hand | Stop mouse movement immediately | No delay; locks the current cursor position |
 
 Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Scrolling starts after 1000ms of stability and repeats while the palm is held open; closing the hand or removing it from the frame stops scrolling immediately.
+
+Pointing the right index finger up arms fine cursor movement. A detected left fist immediately freezes the cursor and exits pointer mode. After the fist is released, the right index must remain stable for another 500ms before movement resumes.
 
 Events are sent to the currently focused application. Any target that responds to standard mouse events can use the controller, including browsers, macOS Finder, Windows File Explorer, PPT viewers, image viewers, and office software. The project does not determine whether an application supports a particular action, so the final behavior depends on that application's own mouse handling.
 
@@ -121,7 +125,9 @@ Test these actions in order:
 
 - Hold the left palm open for about 1000ms; it should keep printing `scroll up`.
 - Hold the right palm open for about 1000ms; it should keep printing `scroll down`.
-- Hold a thumbs-up pose; the terminal should print one `left click` after about 500ms. Holding it must not repeat the click.
+- Hold the right thumb sideways for about 500ms; the terminal should print one `left click`. Holding it must not repeat the click.
+- Hold the right index finger up for about 500ms; the preview `POINTER` state should become `fine`.
+- Make a left fist while moving; `LEFT FIST` should become `True` and `POINTER` should immediately become `idle`.
 
 Only continue to live input after dry-run output is stable.
 
@@ -173,7 +179,9 @@ python -m hand_mouse --live \
   --scroll-amount 4 \
   --scroll-stable-time 1.00 \
   --scroll-repeat-interval 0.25 \
-  --click-stable-time 0.50
+  --click-stable-time 0.50 \
+  --pointer-stable-time 0.50 \
+  --fine-sensitivity 0.35
 ```
 
 The source-checkout entry point is also available:

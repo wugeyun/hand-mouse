@@ -88,7 +88,14 @@ class MediaPipeHandTracker:
         for categories in getattr(result, "handedness", []):
             category = categories[0] if categories else None
             label = getattr(category, "category_name", "") if category else ""
-            handedness.append(label.lower())
+            label = label.lower()
+            # The camera frame is mirrored before tracking, so MediaPipe's
+            # handedness label must be swapped back to match the real hand.
+            if label == "left":
+                label = "right"
+            elif label == "right":
+                label = "left"
+            handedness.append(label)
         poses = [
             make_pose(hand_landmarks, handedness[index] if index < len(handedness) else None)
             for index, hand_landmarks in enumerate(result.hand_landmarks)

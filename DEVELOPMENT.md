@@ -34,7 +34,8 @@ run_hand_mouse.py # 未安装项目时的源码入口
 ## 动作契约
 
 - `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定 1000ms 后返回 `1` 并按间隔持续返回，右手张开稳定 1000ms 后返回 `-1` 并按间隔持续返回；手掌收起后停止。
-- `ThumbUpClickDetector.update(thumbs_up, now)`：拇指向上稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开拇指向上后再次进入才会重新触发。
+- `HorizontalThumbClickDetector.update(thumb_horizontal, now)`：右手拇指横向姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开该姿态后再次进入才会重新触发。
+- `PointerModeDetector.update(hands, now)`：右手食指向上稳定后进入精细模式；左手握拳时立即返回 `idle`，右手食指折起后同样退出。
 - `InputController` 是唯一负责发送真实输入事件的类。检测器和单元测试不能直接调用 PyAutoGUI。
 
 ## 本地开发
@@ -72,7 +73,10 @@ python -m hand_mouse --live
 
 - `--scroll-stable-time`：张开手掌持续多久后确认滚动。
 - `--scroll-repeat-interval`：连续滚动事件之间的间隔。
-- `--click-stable-time`：拇指向上持续多久后确认左键。
+- `--click-stable-time`：右手拇指横向姿态持续多久后确认左键。
+- `--pointer-stable-time`：食指指针姿态持续多久后进入鼠标模式。
+- `--cursor-smoothing`：精细指针的平滑系数。
+- `--fine-sensitivity`：精细指针的相对移动灵敏度。
 
 误触发时提高 `--scroll-stable-time`，并增加光照或扩大摄像头取景区域。
 

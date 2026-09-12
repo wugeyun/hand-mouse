@@ -17,6 +17,7 @@ class InputController:
         self.pyautogui = pyautogui
         self.live = live
         self.scroll_amount = scroll_amount
+        self.last_position = None
         if self.pyautogui is not None:
             self.pyautogui.PAUSE = 0.01
             self.pyautogui.FAILSAFE = True
@@ -35,3 +36,23 @@ class InputController:
 
     def left_click(self) -> None:
         self._emit("left click", lambda: self.pyautogui.click())
+
+    def screen_size(self) -> tuple[int, int]:
+        if self.pyautogui is None:
+            return 1920, 1080
+        width, height = self.pyautogui.size()
+        return int(width), int(height)
+
+    def position(self) -> tuple[int, int]:
+        if self.live and self.pyautogui is not None:
+            x, y = self.pyautogui.position()
+            self.last_position = int(x), int(y)
+        if self.last_position is not None:
+            return self.last_position
+        width, height = self.screen_size()
+        return width // 2, height // 2
+
+    def move_cursor(self, position: tuple[int, int]) -> None:
+        self.last_position = position
+        if self.live and self.pyautogui is not None:
+            self.pyautogui.moveTo(position[0], position[1], duration=0)
