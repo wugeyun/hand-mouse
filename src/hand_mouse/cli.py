@@ -16,6 +16,11 @@ if TYPE_CHECKING:
     from .detectors import HandPose
 
 
+def strictly_increasing_timestamp(elapsed_ms: int, previous_timestamp_ms: int) -> int:
+    """Return a MediaPipe-compatible timestamp even for sub-millisecond frames."""
+    return max(elapsed_ms, previous_timestamp_ms + 1)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Coarse webcam gesture controller for desktop applications")
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -169,6 +174,7 @@ def run(args: argparse.Namespace) -> int:
     last_action = ""
 
     start_time = time.monotonic()
+    last_timestamp_ms = -1
     try:
         with tracker:
             while True:
@@ -180,7 +186,12 @@ def run(args: argparse.Namespace) -> int:
                 frame = cv2.flip(frame, 1)
                 rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 now = time.monotonic()
-                result, poses = tracker.process(rgb, int((now - start_time) * 1000))
+                timestamp_ms = strictly_increasing_timestamp(
+                    int((now - start_time) * 1000),
+                    last_timestamp_ms,
+                )
+                last_timestamp_ms = timestamp_ms
+                result, poses = tracker.process(rgb, timestamp_ms)
                 fist_stop = any(is_emergency_fist(hand) for hand in poses)
                 if fist_stop:
                     pointer_detector.reset()
