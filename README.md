@@ -35,6 +35,8 @@
 
 项目要求 Python 3.10 或更高版本，推荐 Python 3.12。不要只看 `python3` 这个命令名，必须先确认它实际对应的版本。
 
+本文档统一使用 `.venv312` 作为虚拟环境目录名。你可以根据实际 Python 版本和个人习惯改成其他名称，但后续命令中的目录名必须保持一致。
+
 ### 1. 获取项目
 
 克隆正式仓库：
@@ -62,15 +64,15 @@ python3.12 --version
 例如使用 Python 3.12 创建虚拟环境：
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
+python3.12 -m venv .venv312
+source .venv312/bin/activate
 ```
 
 如果确认 `python3` 本身已经是 3.10+，也可以使用：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv312
+source .venv312/bin/activate
 ```
 
 激活后再次确认，确保没有误用系统 Python：
@@ -80,7 +82,7 @@ python --version
 python -c "import sys; print(sys.executable)"
 ```
 
-输出应为 Python 3.10+，解释器路径应位于项目的 `.venv` 目录下。
+输出应为 Python 3.10+，解释器路径应位于项目的 `.venv312` 目录下。
 
 ### 3. Windows PowerShell：检查并选择 Python
 
@@ -92,15 +94,15 @@ py -3.12 --version
 使用 Python 3.12 创建并激活虚拟环境：
 
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
+py -3.12 -m venv .venv312
+.\.venv312\Scripts\Activate.ps1
 python --version
 python -c "import sys; print(sys.executable)"
 ```
 
-如果 PowerShell 禁止执行激活脚本，可以直接使用虚拟环境中的 Python，或按系统提示调整当前用户的执行策略。不要因此改用未确认版本的全局 `python`。
+如果 PowerShell 禁止执行激活脚本，可以直接使用 `.venv312` 中的 Python，或按系统提示调整当前用户的执行策略。不要因此改用未确认版本的全局 `python`。
 
-### 4. 安装依赖
+### 4. 安装依赖和确认模型
 
 确认虚拟环境已经激活后执行：
 
@@ -110,7 +112,21 @@ python -m pip install -e .
 python -m hand_mouse --version
 ```
 
-首次启动时，程序会从 MediaPipe 官方模型地址下载 `hand_landmarker.task`，并缓存到用户缓存目录。该模型只用于本地手部关键点检测；如果运行机器无法访问模型地址，可以手动下载模型后通过 `--model PATH` 指定文件。
+仓库已经包含 `src/hand_mouse/models/hand_landmarker.task`，因此正常克隆后不需要再次下载模型。程序会按以下顺序寻找模型：命令行 `--model PATH`、仓库内置模型、用户缓存目录，最后才尝试从 MediaPipe 官方地址下载。模型只用于本地手部关键点检测，摄像头画面不会上传。
+
+确认仓库内模型存在：
+
+macOS：
+
+```bash
+test -s src/hand_mouse/models/hand_landmarker.task && echo "model is ready"
+```
+
+Windows PowerShell：
+
+```powershell
+Test-Path .\src\hand_mouse\models\hand_landmarker.task
+```
 
 维护代码或运行测试时，安装开发依赖：
 
@@ -118,7 +134,7 @@ python -m hand_mouse --version
 python -m pip install -e ".[dev]"
 ```
 
-### 5. 先运行 dry-run
+### 5. macOS：先运行 dry-run
 
 dry-run 只打开摄像头并打印识别到的动作，不会移动真实鼠标：
 
@@ -138,9 +154,32 @@ python run_hand_mouse.py
 
 只有 dry-run 的输出稳定后，才进行真实输入测试。
 
-### 6. 真实输入测试
+### 6. Windows：先运行 dry-run
 
-先准备一个安全的目标应用，例如浏览器普通网页、macOS 访达中的临时文件夹、Windows 文件管理器中的临时目录，或一张不重要的图片。然后运行：
+在已激活的 PowerShell 中，从仓库根目录执行：
+
+```powershell
+python run_hand_mouse.py
+```
+
+确认 dry-run 稳定后，再打开真实输入：
+
+```powershell
+python run_hand_mouse.py --live --no-preview
+```
+
+如果 PowerShell 不允许激活脚本，可以不激活虚拟环境，直接使用虚拟环境中的解释器：
+
+```powershell
+.\.venv312\Scripts\python.exe run_hand_mouse.py
+.\.venv312\Scripts\python.exe run_hand_mouse.py --live --no-preview
+```
+
+测试完成后在 PowerShell 中按 `Ctrl+C` 停止程序。
+
+### 7. macOS：真实输入测试
+
+先准备一个安全的目标应用，例如浏览器普通网页、macOS 访达中的临时文件夹，或一张不重要的图片。然后运行：
 
 ```bash
 python run_hand_mouse.py --live --no-preview
@@ -150,12 +189,22 @@ python run_hand_mouse.py --live --no-preview
 
 测试完成后切回终端按 `Ctrl+C` 停止程序。
 
-### 7. 权限和常见问题
+### 8. Windows：真实输入测试
+
+先准备一个安全的目标应用，例如浏览器普通网页、Windows 文件管理器中的临时目录，或一张不重要的图片。然后运行：
+
+```powershell
+python run_hand_mouse.py --live --no-preview
+```
+
+程序启动后切换到目标应用，确保目标窗口获得焦点，再测试滚动、左键和右键单击。测试完成后切回 PowerShell 按 `Ctrl+C` 停止程序。
+
+### 9. 权限和常见问题
 
 - macOS：在“系统设置 -> 隐私与安全性”中给运行程序的终端或应用授予“相机”和“辅助功能”权限。
 - Windows：允许 Python 或终端访问摄像头；PowerShell 可以用 `py --list` 检查已安装版本。
-- `No module named cv2` 或 `mediapipe`：确认已经激活 `.venv`，并使用 `python -m pip install -e .` 安装，不要使用另一个 Python 的 `pip`。
-- 模型下载失败：手动准备 `hand_landmarker.task`，然后使用 `python run_hand_mouse.py --model PATH`。
+- `No module named cv2` 或 `mediapipe`：确认已经激活 `.venv312`，并使用 `python -m pip install -e .` 安装，不要使用另一个 Python 的 `pip`。
+- 模型文件被删除或克隆不完整：确认 `src/hand_mouse/models/hand_landmarker.task` 存在；也可以手动准备模型后使用 `python run_hand_mouse.py --model PATH`。
 - `Cannot open camera 0`：确认摄像头权限，或尝试 `--camera 1`、`--camera 2`。
 - dry-run 正常但 live 没反应：优先检查 macOS“辅助功能”权限和当前焦点窗口。
 

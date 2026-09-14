@@ -1,5 +1,12 @@
 # 变更记录 / Changelog
 
+## [0.1.7] - 2026-09-14
+
+### Changed
+
+- 将 `hand_landmarker.task` 随仓库分发，克隆后无需首次启动联网下载；保留缓存和官方地址作为后备。
+- README 补充 macOS 和 Windows 的分平台安装、模型确认、dry-run、真实输入及权限说明。
+
 ## [0.1.6] - 2026-09-12
 
 ### Added

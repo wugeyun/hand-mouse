@@ -1,5 +1,6 @@
 import numpy as np
 
+from hand_mouse import tracker
 from hand_mouse.controller import DisplayBounds, InputController, select_display
 from hand_mouse.detectors import (
     HandPose,
@@ -23,6 +24,17 @@ from hand_mouse.pointer import (
     PinchPointerDetector,
     PinchPointTracker,
 )
+
+
+def test_bundled_model_is_preferred_to_the_download_cache(tmp_path, monkeypatch) -> None:
+    bundled = tmp_path / "bundled.task"
+    cached = tmp_path / "cached.task"
+    bundled.write_bytes(b"bundled" * 20_000)
+    cached.write_bytes(b"cached")
+    monkeypatch.setattr(tracker, "BUNDLED_MODEL_PATH", bundled)
+    monkeypatch.setattr(tracker, "DEFAULT_MODEL_PATH", cached)
+
+    assert tracker.resolve_model_path(None) == bundled
 
 
 def pose(center: tuple[float, float], scale: float = 0.2, finger_count: int = 0) -> HandPose:

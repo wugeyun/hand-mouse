@@ -19,7 +19,8 @@ src/hand_mouse/
   cli.py         # 摄像头循环和命令行参数
   controller.py  # PyAutoGUI 输入事件、显示器边界和平台修饰键
   detectors.py   # 纯几何/时序手势检测器
-  tracker.py     # MediaPipe Tasks API 和模型缓存
+  tracker.py     # MediaPipe Tasks API 和模型选择/缓存
+  models/        # 随仓库分发的 hand_landmarker.task
 tests/
   test_detectors.py
 run_hand_mouse.py # 未安装项目时的源码入口
@@ -30,6 +31,8 @@ run_hand_mouse.py # 未安装项目时的源码入口
 ```text
 摄像头帧 -> MediaPipe Tasks 关键点 -> HandPose -> 手势检测器 -> 抽象动作 -> PyAutoGUI
 ```
+
+`tracker.py` 默认优先使用 `models/hand_landmarker.task`，因此源码克隆和 editable 安装都不依赖首次联网下载。仓库模型缺失时才回退到用户缓存和官方模型地址；发布或同步仓库时应保留该二进制文件。
 
 ## 动作契约
 
@@ -45,8 +48,8 @@ run_hand_mouse.py # 未安装项目时的源码入口
 ## 本地开发
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv312
+source .venv312/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```

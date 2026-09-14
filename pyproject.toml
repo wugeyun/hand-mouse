@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hand-mouse"
-version = "0.1.6"
+version = "0.1.7"
 description = "Coarse webcam hand gestures for desktop mouse actions"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -29,6 +29,9 @@ hand-mouse = "hand_mouse.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hand_mouse = ["models/*.task"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

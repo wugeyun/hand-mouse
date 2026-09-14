@@ -19,7 +19,8 @@ src/hand_mouse/
   cli.py         # camera loop and CLI arguments
   controller.py  # PyAutoGUI input events, display bounds, and platform modifiers
   detectors.py   # pure geometry/time-series gesture detectors
-  tracker.py     # MediaPipe Tasks API and model cache
+  tracker.py     # MediaPipe Tasks API and model selection/cache
+  models/        # Bundled hand_landmarker.task model
 tests/
   test_detectors.py
 run_hand_mouse.py # source-checkout entry point
@@ -30,6 +31,8 @@ The data flow is:
 ```text
 camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract action -> PyAutoGUI
 ```
+
+`tracker.py` prefers `models/hand_landmarker.task`, so a source clone and editable installation do not require a first-run model download. If the bundled model is missing, it falls back to the user cache and then the official model URL; releases and repository mirrors should retain this binary file.
 
 ## Action contracts
 
@@ -45,8 +48,8 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 ## Local development
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv312
+source .venv312/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e ".[dev]"
 ```

@@ -35,6 +35,8 @@ Follow this order: confirm the requirements, get the project, select the correct
 
 The project requires Python 3.10 or newer; Python 3.12 is recommended. Do not rely on the command name `python3` alone. Always confirm the version it resolves to.
 
+This guide consistently uses `.venv312` as the virtual-environment directory name. You may choose another name for your Python installation, but keep that name consistent in all subsequent activation and interpreter paths.
+
 ### 1. Get the project
 
 Clone the official repository:
@@ -62,15 +64,15 @@ Selection rules:
 For example, create a virtual environment with Python 3.12:
 
 ```bash
-python3.12 -m venv .venv
-source .venv/bin/activate
+python3.12 -m venv .venv312
+source .venv312/bin/activate
 ```
 
 If you confirmed that `python3` itself is 3.10+, you may use:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
+python3 -m venv .venv312
+source .venv312/bin/activate
 ```
 
 Verify again after activation so the system interpreter is not accidentally used:
@@ -80,7 +82,7 @@ python --version
 python -c "import sys; print(sys.executable)"
 ```
 
-The output must be Python 3.10+ and the executable path should be inside the project's `.venv` directory.
+The output must be Python 3.10+ and the executable path should be inside the project's `.venv312` directory.
 
 ### 3. Windows PowerShell: check and select Python
 
@@ -92,15 +94,15 @@ py -3.12 --version
 Create and activate a Python 3.12 virtual environment:
 
 ```powershell
-py -3.12 -m venv .venv
-.venv\Scripts\Activate.ps1
+py -3.12 -m venv .venv312
+.\.venv312\Scripts\Activate.ps1
 python --version
 python -c "import sys; print(sys.executable)"
 ```
 
-If PowerShell blocks activation scripts, you can call the Python executable inside `.venv` directly or follow the system prompt to adjust the current-user execution policy. Do not switch to an unverified global `python`.
+If PowerShell blocks activation scripts, you can call the Python executable inside `.venv312` directly or follow the system prompt to adjust the current-user execution policy. Do not switch to an unverified global `python`.
 
-### 4. Install dependencies
+### 4. Install dependencies and verify the model
 
 With the virtual environment active:
 
@@ -110,7 +112,21 @@ python -m pip install -e .
 python -m hand_mouse --version
 ```
 
-On the first start, the program downloads `hand_landmarker.task` from the official MediaPipe model endpoint and caches it in the user cache directory. The model is used for local hand-landmark detection; if the machine cannot reach that endpoint, download the model manually and pass it with `--model PATH`.
+The repository includes `src/hand_mouse/models/hand_landmarker.task`, so a normal clone does not need to download the model. The program checks, in order: `--model PATH`, the bundled repository model, the user cache, and finally the official MediaPipe download URL. The model is used only for local hand-landmark detection; camera frames are not uploaded.
+
+Verify that the bundled model exists:
+
+macOS:
+
+```bash
+test -s src/hand_mouse/models/hand_landmarker.task && echo "model is ready"
+```
+
+Windows PowerShell:
+
+```powershell
+Test-Path .\src\hand_mouse\models\hand_landmarker.task
+```
 
 For maintenance work or tests, install development dependencies:
 
@@ -118,7 +134,7 @@ For maintenance work or tests, install development dependencies:
 python -m pip install -e ".[dev]"
 ```
 
-### 5. Run dry-run first
+### 5. macOS: run dry-run first
 
 Dry-run opens the camera and prints detected actions without moving the real mouse:
 
@@ -138,9 +154,32 @@ Test these actions in order:
 
 Only continue to live input after dry-run output is stable.
 
-### 6. Test live input
+### 6. Windows: run dry-run first
 
-Prepare a safe target application such as a normal browser page, a temporary folder in macOS Finder or Windows File Explorer, or a non-important image. Then run:
+From the repository root, with the virtual environment activated:
+
+```powershell
+python run_hand_mouse.py
+```
+
+After dry-run is stable, enable real input:
+
+```powershell
+python run_hand_mouse.py --live --no-preview
+```
+
+If PowerShell blocks activation scripts, use the virtual-environment interpreter directly:
+
+```powershell
+.\.venv312\Scripts\python.exe run_hand_mouse.py
+.\.venv312\Scripts\python.exe run_hand_mouse.py --live --no-preview
+```
+
+Press `Ctrl+C` in PowerShell when testing is finished.
+
+### 7. macOS: test live input
+
+Prepare a safe target application such as a normal browser page, a temporary folder in macOS Finder, or a non-important image. Then run:
 
 ```bash
 python run_hand_mouse.py --live --no-preview
@@ -150,12 +189,22 @@ Switch to the target application after the process starts and make sure its wind
 
 Return to the terminal and press `Ctrl+C` when testing is finished.
 
-### 7. Permissions and troubleshooting
+### 8. Windows: test live input
+
+Prepare a safe target application such as a normal browser page, a temporary folder in Windows File Explorer, or a non-important image. Then run:
+
+```powershell
+python run_hand_mouse.py --live --no-preview
+```
+
+Switch to the target application after the process starts and make sure its window is focused before testing scroll and clicks. Return to PowerShell and press `Ctrl+C` when testing is finished.
+
+### 9. Permissions and troubleshooting
 
 - macOS: in System Settings -> Privacy & Security, grant Camera and Accessibility permissions to the terminal or application running the controller.
 - Windows: allow Python or the terminal to access the camera; use `py --list` to inspect installed versions.
-- `No module named cv2` or `mediapipe`: confirm that `.venv` is active and run `python -m pip install -e .`; do not use another Python's `pip`.
-- Model download failure: prepare `hand_landmarker.task` manually and run `python run_hand_mouse.py --model PATH`.
+- `No module named cv2` or `mediapipe`: confirm that `.venv312` is active and run `python -m pip install -e .`; do not use another Python's `pip`.
+- Missing or incomplete clone: confirm that `src/hand_mouse/models/hand_landmarker.task` exists; you can also prepare the model manually and run `python run_hand_mouse.py --model PATH`.
 - `Cannot open camera 0`: check camera permissions or try `--camera 1` or `--camera 2`.
 - Dry-run works but live input does not: check macOS Accessibility permissions and the focused target window first.
 

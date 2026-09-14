@@ -15,7 +15,9 @@ from .detectors import HandPose, make_pose
 
 
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
+BUNDLED_MODEL_PATH = Path(__file__).resolve().parent / "models" / "hand_landmarker.task"
 DEFAULT_MODEL_PATH = Path.home() / ".cache" / "hand-mouse" / "hand_landmarker.task"
+MIN_MODEL_SIZE = 100_000
 
 
 def resolve_model_path(model_path: Optional[str]) -> Path:
@@ -24,6 +26,9 @@ def resolve_model_path(model_path: Optional[str]) -> Path:
         if not path.is_file():
             raise RuntimeError(f"MediaPipe model file does not exist: {path}")
         return path
+
+    if BUNDLED_MODEL_PATH.is_file() and BUNDLED_MODEL_PATH.stat().st_size >= MIN_MODEL_SIZE:
+        return BUNDLED_MODEL_PATH
 
     path = DEFAULT_MODEL_PATH
     if path.is_file() and path.stat().st_size > 0:
@@ -36,7 +41,7 @@ def resolve_model_path(model_path: Optional[str]) -> Path:
         with urllib.request.urlopen(MODEL_URL, timeout=90) as response, temporary_path.open("wb") as output:
             while chunk := response.read(1024 * 1024):
                 output.write(chunk)
-        if temporary_path.stat().st_size < 100_000:
+        if temporary_path.stat().st_size < MIN_MODEL_SIZE:
             raise RuntimeError("downloaded MediaPipe model is unexpectedly small")
         os.replace(temporary_path, path)
     except (OSError, urllib.error.URLError, RuntimeError) as exc:
