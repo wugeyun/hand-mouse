@@ -208,6 +208,27 @@ python run_hand_mouse.py --live --no-preview
 - `Cannot open camera 0`：确认摄像头权限，或尝试 `--camera 1`、`--camera 2`。
 - dry-run 正常但 live 没反应：优先检查 macOS“辅助功能”权限和当前焦点窗口。
 
+## 一键部署和运行
+
+仓库根目录提供两个平台脚本。脚本会自动检查 Python、选择或创建虚拟环境、安装项目和测试依赖、确认内置模型、运行测试，然后在确认后启动正式鼠标控制。
+
+macOS：双击 `run_macos.command`。如果系统提示没有执行权限，在终端中从项目根目录执行一次：
+
+```bash
+chmod +x run_macos.command
+open run_macos.command
+```
+
+Windows：双击 `run_windows.bat`。也可以在 PowerShell 中运行：
+
+```powershell
+.\run_windows.bat
+```
+
+首次运行时，脚本会优先查找 Python 3.12、3.11、3.10；如果没有符合要求的版本，会提供版本选择。macOS 使用 Homebrew 安装，Windows 使用 `winget` 安装；如果对应工具不可用，脚本会打开 Python 官方下载页面并提示重新运行。虚拟环境目录默认是 `.venv312`，在提示处直接按回车即可，也可以输入自定义名称。
+
+首次部署完成后，脚本会保存当前平台的本地环境配置。以后再次双击时，确认跳过部署即可直接进入“运行测试”和“正式启动”两步；测试失败时不会启动真实鼠标事件。正式启动使用 `--live --no-preview`，运行期间按 `Ctrl+C` 停止。
+
 ## 运行
 
 安装完成后，也可以使用下面的命令启动 dry-run：

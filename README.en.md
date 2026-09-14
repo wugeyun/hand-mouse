@@ -208,6 +208,27 @@ Switch to the target application after the process starts and make sure its wind
 - `Cannot open camera 0`: check camera permissions or try `--camera 1` or `--camera 2`.
 - Dry-run works but live input does not: check macOS Accessibility permissions and the focused target window first.
 
+## One-Click Deployment And Run
+
+The repository provides one script for each platform. The script checks Python, selects or creates a virtual environment, installs the project and test dependencies, verifies the bundled model, runs the tests, and starts live mouse control only after confirmation.
+
+macOS: double-click `run_macos.command`. If macOS reports that the file is not executable, run this once from the repository root:
+
+```bash
+chmod +x run_macos.command
+open run_macos.command
+```
+
+Windows: double-click `run_windows.bat`. You can also run it from PowerShell:
+
+```powershell
+.\run_windows.bat
+```
+
+On the first run, the scripts look for Python 3.12, 3.11, and 3.10 in that order. If no supported version is available, they offer a version choice. macOS uses Homebrew for installation, and Windows uses `winget`; if the required tool is unavailable, the script opens the official Python download page and asks you to run it again. The default virtual-environment directory is `.venv312`; press Enter to accept it or enter a custom name.
+
+After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live --no-preview`; press `Ctrl+C` to stop it.
+
 ## Run
 
 After installation, you can also start dry-run with:

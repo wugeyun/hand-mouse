@@ -1,5 +1,11 @@
 # 变更记录 / Changelog
 
+## [0.1.8] - 2026-09-14
+
+### Added
+
+- 增加可点击的 macOS `run_macos.command` 和 Windows `run_windows.bat` 自动化运行脚本，支持首次部署、环境选择、测试和正式启动；后续运行可跳过部署阶段。
+
 ## [0.1.7] - 2026-09-14
 
 ### Changed
