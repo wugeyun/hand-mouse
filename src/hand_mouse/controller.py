@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -23,6 +24,17 @@ class DisplayBounds:
     def contains(self, position: tuple[int, int]) -> bool:
         x, y = position
         return self.x <= x < self.x + self.width and self.y <= y < self.y + self.height
+
+
+WINDOWS_WHEEL_DELTA = 120
+
+
+def scroll_delta(direction: int, amount: int, platform: str | None = None) -> int:
+    """Convert logical scroll notches to the native input units for each platform."""
+    delta = direction * amount
+    if (platform or sys.platform) == "win32":
+        return delta * WINDOWS_WHEEL_DELTA
+    return delta
 
 
 def select_display(position: tuple[int, int], displays: tuple[DisplayBounds, ...]) -> DisplayBounds:
@@ -70,7 +82,7 @@ class InputController:
     def scroll(self, direction: int) -> None:
         self._emit(
             f"scroll {'up' if direction > 0 else 'down'}",
-            lambda: self.pyautogui.scroll(direction * self.scroll_amount),
+            lambda: self.pyautogui.scroll(scroll_delta(direction, self.scroll_amount)),
         )
 
     def left_click(self) -> None:

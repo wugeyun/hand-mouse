@@ -251,6 +251,8 @@ python -m hand_mouse --live --no-preview
 
 Useful tuning options:
 
+`--scroll-amount` is expressed in logical wheel notches. Windows converts this to the native system wheel unit automatically; macOS keeps its native scroll units.
+
 ```bash
 python -m hand_mouse --live \
   --scroll-amount 4 \

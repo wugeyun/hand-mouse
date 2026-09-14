@@ -251,6 +251,8 @@ python -m hand_mouse --live --no-preview
 
 常用调节项：
 
+`--scroll-amount` 表示逻辑滚轮刻度。Windows 会自动转换为系统标准滚轮单位，macOS 保持原生滚动单位。
+
 ```bash
 python -m hand_mouse --live \
   --scroll-amount 4 \
