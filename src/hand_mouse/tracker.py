@@ -82,7 +82,6 @@ class MediaPipeHandTracker:
             raise RuntimeError(f"could not initialize MediaPipe hand tracker: {exc}") from exc
 
         self._mp = mp
-        self._connections = vision.HandLandmarksConnections.HAND_CONNECTIONS
 
     def process(self, frame_rgb: np.ndarray, timestamp_ms: int):
         image = self._mp.Image(image_format=self._mp.ImageFormat.SRGB, data=frame_rgb)
@@ -104,23 +103,6 @@ class MediaPipeHandTracker:
             for index, hand_landmarks in enumerate(result.hand_landmarks)
         ]
         return result, poses
-
-    def draw_landmarks(self, frame, result) -> None:
-        import cv2
-
-        height, width = frame.shape[:2]
-        for hand_landmarks in result.hand_landmarks:
-            pixels = [
-                (
-                    max(0, min(width - 1, int(landmark.x * width))),
-                    max(0, min(height - 1, int(landmark.y * height))),
-                )
-                for landmark in hand_landmarks
-            ]
-            for connection in self._connections:
-                cv2.line(frame, pixels[connection.start], pixels[connection.end], (0, 180, 0), 2)
-            for point in pixels:
-                cv2.circle(frame, point, 3, (0, 220, 220), -1)
 
     def close(self) -> None:
         self._landmarker.close()

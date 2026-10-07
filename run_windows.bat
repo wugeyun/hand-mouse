@@ -33,6 +33,13 @@ if "%DEPLOY%"=="1" (
     if errorlevel 1 goto :failed
 )
 
+"%VENV_PY%" -c "import PySide6.QtWidgets" >nul 2>&1
+if errorlevel 1 (
+    echo Installing desktop skeleton dependencies...
+    "%VENV_PY%" -m pip install -e ".[dev]"
+    if errorlevel 1 goto :failed
+)
+
 echo Running tests...
 "%VENV_PY%" -m pytest
 if errorlevel 1 (
@@ -46,7 +53,7 @@ if errorlevel 1 (
     goto :done
 )
 
-echo Starting live mode with skeleton preview. Press q/ESC in preview or Ctrl+C in terminal to stop.
+echo Starting live mode with desktop skeleton lines. Press Ctrl+C in terminal to stop.
 "%VENV_PY%" run_hand_mouse.py --live
 set "RUN_RESULT=%ERRORLEVEL%"
 if not "%RUN_RESULT%"=="0" goto :failed

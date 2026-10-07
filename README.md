@@ -136,7 +136,7 @@ python -m pip install -e ".[dev]"
 
 ### 5. macOS：先运行 dry-run
 
-dry-run 只打开摄像头并打印识别到的动作，不会移动真实鼠标：
+dry-run 在后台读取摄像头，并在桌面透明叠加实时骨骼线条，同时在终端打印识别到的动作，不会移动真实鼠标：
 
 ```bash
 python run_hand_mouse.py
@@ -148,9 +148,9 @@ python run_hand_mouse.py
 - 右手掌张开保持约 500ms，随后终端应持续显示 `scroll down`。
 - 右手拇指横向伸出保持约 300ms，终端应显示一次 `left click`；保持该姿态不会连续点击。
 - 右手比耶保持约 300ms，终端应显示一次 `right click`；保持该姿态不会连续触发。
-- 右手拇指和食指捏合保持约 300ms，预览中的 `POINTER` 应变为 `fine`；分开后应停止移动。
-- 精细模式下将捏合点移动到摄像头画面的四个边缘，鼠标应在当前显示器的对应边缘停止。
-- 左手或右手握拳，预览中的 `FIST STOP` 应变为 `True`，所有动作应立即停止。
+- 右手拇指和食指捏合保持约 300ms 后进入鼠标移动模式；真实输入时，骨骼的捏合中点与鼠标位置重合，分开后停止移动。
+- 真实输入模式下将捏合点移动到摄像头画面的四个边缘，鼠标应在当前显示器的对应边缘停止。
+- 左手或右手握拳，滚动、点击和鼠标移动应立即停止。
 
 只有 dry-run 的输出稳定后，才进行真实输入测试。
 
@@ -165,14 +165,14 @@ python run_hand_mouse.py
 确认 dry-run 稳定后，再打开真实输入：
 
 ```powershell
-python run_hand_mouse.py --live --no-preview
+python run_hand_mouse.py --live
 ```
 
 如果 PowerShell 不允许激活脚本，可以不激活虚拟环境，直接使用虚拟环境中的解释器：
 
 ```powershell
 .\.venv312\Scripts\python.exe run_hand_mouse.py
-.\.venv312\Scripts\python.exe run_hand_mouse.py --live --no-preview
+.\.venv312\Scripts\python.exe run_hand_mouse.py --live
 ```
 
 测试完成后在 PowerShell 中按 `Ctrl+C` 停止程序。
@@ -182,7 +182,7 @@ python run_hand_mouse.py --live --no-preview
 先准备一个安全的目标应用，例如浏览器普通网页、macOS 访达中的临时文件夹，或一张不重要的图片。然后运行：
 
 ```bash
-python run_hand_mouse.py --live --no-preview
+python run_hand_mouse.py --live
 ```
 
 程序启动后切换到目标应用，确保目标窗口获得焦点，再测试滚动、左键和右键单击。所有事件都会发送给当前焦点窗口，项目不会判断目标应用是否支持某个动作。
@@ -194,7 +194,7 @@ python run_hand_mouse.py --live --no-preview
 先准备一个安全的目标应用，例如浏览器普通网页、Windows 文件管理器中的临时目录，或一张不重要的图片。然后运行：
 
 ```powershell
-python run_hand_mouse.py --live --no-preview
+python run_hand_mouse.py --live
 ```
 
 程序启动后切换到目标应用，确保目标窗口获得焦点，再测试滚动、左键和右键单击。测试完成后切回 PowerShell 按 `Ctrl+C` 停止程序。
@@ -227,7 +227,7 @@ Windows：双击 `run_windows.bat`。也可以在 PowerShell 中运行：
 
 首次运行时，脚本会优先查找 Python 3.12、3.11、3.10；如果没有符合要求的版本，会提供版本选择。macOS 使用 Homebrew 安装，Windows 使用 `winget` 安装；如果对应工具不可用，脚本会打开 Python 官方下载页面并提示重新运行。虚拟环境目录默认是 `.venv312`，在提示处直接按回车即可，也可以输入自定义名称。
 
-首次部署完成后，脚本会保存当前平台的本地环境配置。以后再次双击时，确认跳过部署即可直接进入“运行测试”和“正式启动”两步；测试失败时不会启动真实鼠标事件。正式启动使用 `--live`，默认显示摄像头画面、实时手指骨骼和识别状态。启动后切换到目标应用，让目标窗口获得焦点；在预览窗口按 `q` / `Esc`，或在终端按 `Ctrl+C` 停止。手动启动时可用 `--no-preview` 隐藏预览。
+首次部署完成后，脚本会保存当前平台的本地环境配置。以后再次双击时，确认跳过部署即可直接进入“运行测试”和“正式启动”两步；测试失败时不会启动真实鼠标事件。正式启动使用 `--live`，桌面仅显示实时骨骼线条：背景透明、无摄像头画面、关键点圆点或状态文字，鼠标点击可穿透且不抢焦点。骨骼按摄像头坐标铺满当前鼠标所在显示器的完整范围；右手捏合时整副骨骼一起平移，使拇指和食指的中点与实际鼠标位置重合。手离开后线条立即清空。在终端按 `Ctrl+C` 停止，手动启动时可用 `--no-preview` 隐藏骨骼叠加层。
 
 ## 运行
 
@@ -243,7 +243,7 @@ python -m hand_mouse
 python -m hand_mouse --live
 ```
 
-全屏工作或不希望预览窗口干扰当前应用时，可以关闭预览窗口，使用 `Ctrl+C` 停止：
+如需隐藏桌面骨骼叠加层，使用 `--no-preview`；在终端按 `Ctrl+C` 停止：
 
 ```bash
 python -m hand_mouse --live --no-preview

@@ -17,6 +17,7 @@ The project targets general desktop interaction, so it prioritizes low cognitive
 ```text
 src/hand_mouse/
   cli.py         # camera loop and CLI arguments
+  overlay.py     # transparent desktop skeleton and pinch-coordinate alignment
   controller.py  # PyAutoGUI input events, display bounds, and platform modifiers
   detectors.py   # pure geometry/time-series gesture detectors
   tracker.py     # MediaPipe Tasks API and model selection/cache
@@ -43,6 +44,7 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 - `PinchPointTracker` saves the latest reliable frame and landmarks during a pinch. Local thumb and index fingertip tracking starts only when the full hand landmarks disappear and supplies their midpoint; recovered landmarks refresh the reference frame.
 - `CursorMapper` maps the normalized pinch midpoint to the full bounds of the display containing the cursor when fine mode starts. It preserves the current cursor position, then smoothly removes the initial offset; the active mode does not switch displays automatically. The deadzone uses accumulated movement, and smoothing continues toward the last accepted target after the hand stops.
 - A fist with either hand is a global emergency stop that resets scrolling, clicking, pinch state, and local tracking.
+- `SkeletonOverlay` updates a transparent topmost window on the main thread, drawing only bone connections and accepting neither mouse input nor keyboard focus. Camera coordinates fill the current display; a right-pinched skeleton is translated as a whole to align with the actual cursor, and missing hands clear the lines. `--no-preview` disables drawing; terminal `Ctrl+C` exits.
 - `InputController` is the only class allowed to send real input events and provides left- and right-click methods. Detectors and unit tests must not call PyAutoGUI directly.
 
 ## Local development

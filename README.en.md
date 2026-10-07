@@ -136,7 +136,7 @@ python -m pip install -e ".[dev]"
 
 ### 5. macOS: run dry-run first
 
-Dry-run opens the camera and prints detected actions without moving the real mouse:
+Dry-run reads the camera in the background, draws live skeleton lines on a transparent desktop overlay, and prints detected actions without moving the real mouse:
 
 ```bash
 python run_hand_mouse.py
@@ -148,9 +148,9 @@ Test these actions in order:
 - Hold the right palm open for about 500ms; it should keep printing `scroll down`.
 - Hold the right thumb sideways for about 300ms; the terminal should print one `left click`. Holding it must not repeat the click.
 - Hold a right-hand V sign for about 300ms; the terminal should print one `right click`. Holding it must not repeat the click.
-- Pinch the right thumb and index finger for about 300ms; the preview `POINTER` state should become `fine`, and separating them should stop movement.
-- In fine mode, move the pinch point to all four camera edges; the cursor should stop at the matching edge of the active display.
-- Make a fist with either hand; `FIST STOP` should become `True` and all actions should stop immediately.
+- Pinch the right thumb and index finger for about 300ms to enter pointer mode. In live mode, the skeleton pinch midpoint aligns with the actual cursor; separating the fingers stops movement.
+- In live mode, move the pinch point to all four camera edges; the cursor should stop at the matching edge of the active display.
+- Make a fist with either hand; scrolling, clicking, and cursor movement should stop immediately.
 
 Only continue to live input after dry-run output is stable.
 
@@ -165,14 +165,14 @@ python run_hand_mouse.py
 After dry-run is stable, enable real input:
 
 ```powershell
-python run_hand_mouse.py --live --no-preview
+python run_hand_mouse.py --live
 ```
 
 If PowerShell blocks activation scripts, use the virtual-environment interpreter directly:
 
 ```powershell
 .\.venv312\Scripts\python.exe run_hand_mouse.py
-.\.venv312\Scripts\python.exe run_hand_mouse.py --live --no-preview
+.\.venv312\Scripts\python.exe run_hand_mouse.py --live
 ```
 
 Press `Ctrl+C` in PowerShell when testing is finished.
@@ -182,7 +182,7 @@ Press `Ctrl+C` in PowerShell when testing is finished.
 Prepare a safe target application such as a normal browser page, a temporary folder in macOS Finder, or a non-important image. Then run:
 
 ```bash
-python run_hand_mouse.py --live --no-preview
+python run_hand_mouse.py --live
 ```
 
 Switch to the target application after the process starts and make sure its window is focused before testing scroll, left clicks, and right clicks. Events are sent to the focused window; the project does not determine whether the target supports a particular action.
@@ -194,7 +194,7 @@ Return to the terminal and press `Ctrl+C` when testing is finished.
 Prepare a safe target application such as a normal browser page, a temporary folder in Windows File Explorer, or a non-important image. Then run:
 
 ```powershell
-python run_hand_mouse.py --live --no-preview
+python run_hand_mouse.py --live
 ```
 
 Switch to the target application after the process starts and make sure its window is focused before testing scroll and clicks. Return to PowerShell and press `Ctrl+C` when testing is finished.
@@ -227,7 +227,7 @@ Windows: double-click `run_windows.bat`. You can also run it from PowerShell:
 
 On the first run, the scripts look for Python 3.12, 3.11, and 3.10 in that order. If no supported version is available, they offer a version choice. macOS uses Homebrew for installation, and Windows uses `winget`; if the required tool is unavailable, the script opens the official Python download page and asks you to run it again. The default virtual-environment directory is `.venv312`; press Enter to accept it or enter a custom name.
 
-After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and shows the camera feed, live finger skeleton, and recognition status by default. Switch to the target application so it receives input focus. Press `q` / `Esc` in the preview or `Ctrl+C` in the terminal to stop. For manual startup, use `--no-preview` to hide the preview.
+After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and draws only live skeleton lines over the desktop: a transparent background, no camera image, landmark dots, or status text, with mouse clicks passing through and input focus preserved. Camera coordinates fill the full bounds of the display under the cursor. During a right-hand pinch, the entire skeleton is translated together so the thumb-index midpoint matches the actual cursor position. Lines clear as soon as the hand disappears. Press `Ctrl+C` in the terminal to stop, or use `--no-preview` for manual startup without the skeleton overlay.
 
 ## Run
 
@@ -243,7 +243,7 @@ Enable real mouse events after the gestures look stable:
 python -m hand_mouse --live
 ```
 
-For full-screen work or when the preview should not interfere with the active application, hide the preview window and stop with `Ctrl+C`:
+To hide the desktop skeleton overlay, use `--no-preview` and stop with `Ctrl+C` in the terminal:
 
 ```bash
 python -m hand_mouse --live --no-preview

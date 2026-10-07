@@ -7,14 +7,10 @@ import math
 import sys
 import time
 from collections.abc import Sequence
-from typing import TYPE_CHECKING, Any
 
 from . import __version__
 from .controller import InputController
 from .pointer import POINTER_FINE, POINTER_IDLE, CursorMapper, PinchPointerDetector, PinchPointTracker
-
-if TYPE_CHECKING:
-    from .detectors import HandPose
 
 
 def strictly_increasing_timestamp(elapsed_ms: int, previous_timestamp_ms: int) -> int:
@@ -65,7 +61,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--height", type=positive_int, default=540)
     parser.add_argument("--model", help="path to a MediaPipe hand_landmarker.task model")
     parser.add_argument("--live", action="store_true", help="send real mouse events; default is dry-run")
-    parser.add_argument("--no-preview", action="store_true", help="do not open the camera preview window")
+    parser.add_argument("--no-preview", action="store_true", help="hide the desktop skeleton overlay")
     parser.add_argument("--scroll-amount", type=positive_int, default=5)
     parser.add_argument("--scroll-stable-time", type=nonnegative_float, default=0.5)
     parser.add_argument("--scroll-repeat-interval", type=positive_float, default=0.25)
@@ -84,70 +80,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--cursor-acceleration-speed", type=positive_float, default=1.0)
     parser.add_argument("--cursor-deadzone", type=nonnegative_float, default=0.0015)
     return parser
-
-
-def draw_status(
-    frame: Any,
-    hands: list[HandPose],
-    controller: InputController,
-    action: str,
-    pointer_mode: str,
-) -> None:
-    import cv2
-
-    from .detectors import is_emergency_fist, is_thumb_index_pinch
-
-    mode = "LIVE" if controller.live else "DRY-RUN"
-    if len(hands) == 1:
-        pinch_state = "pinch" if is_thumb_index_pinch(hands[0].points, hands[0].box_scale) else "-"
-    else:
-        pinch_state = "-"
-    fist_stop = any(is_emergency_fist(hand) for hand in hands)
-    cv2.putText(
-        frame,
-        f"MODE: {mode}  HANDS: {len(hands)}  HAND: {hands[0].handedness if len(hands) == 1 else '-'}  PINCH: {pinch_state}  PEACE: {hands[0].peace_sign if len(hands) == 1 else '-'}  THUMB SIDE: {hands[0].thumb_horizontal if len(hands) == 1 else '-'}",
-        (20, 32),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.7,
-        (0, 220, 0),
-        2,
-    )
-    cv2.putText(
-        frame,
-        f"LAST: {action or '-'}  POINTER: {pointer_mode}  FIST STOP: {fist_stop}",
-        (20, 62),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.62,
-        (0, 220, 220),
-        2,
-    )
-    cv2.putText(
-        frame,
-        "right thumb + index pinch: pointer | any fist: stop all",
-        (20, 92),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.52,
-        (220, 220, 220),
-        1,
-    )
-    cv2.putText(
-        frame,
-        "right thumb side: left click | right V: right click | palms: scroll",
-        (20, 116),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.52,
-        (220, 220, 220),
-        1,
-    )
-    cv2.putText(
-        frame,
-        "Press q or ESC to quit",
-        (20, frame.shape[0] - 20),
-        cv2.FONT_HERSHEY_SIMPLEX,
-        0.52,
-        (220, 220, 220),
-        1,
-    )
 
 
 def run(args: argparse.Namespace) -> int:
@@ -183,6 +115,7 @@ def run(args: argparse.Namespace) -> int:
         return 2
 
     capture = None
+    overlay = None
     try:
         with tracker:
             capture = cv2.VideoCapture(args.camera)
@@ -209,7 +142,14 @@ def run(args: argparse.Namespace) -> int:
                 acceleration_speed=args.cursor_acceleration_speed,
                 deadzone=args.cursor_deadzone,
             )
-            last_action = ""
+            if not args.no_preview:
+                try:
+                    from .overlay import SkeletonOverlay
+
+                    overlay = SkeletonOverlay(live=args.live)
+                except (ImportError, RuntimeError) as exc:
+                    print(f"Cannot start desktop skeleton overlay: {exc}", file=sys.stderr)
+                    return 2
 
             start_time = time.monotonic()
             last_timestamp_ms = -1
@@ -227,7 +167,7 @@ def run(args: argparse.Namespace) -> int:
                     last_timestamp_ms,
                 )
                 last_timestamp_ms = timestamp_ms
-                result, poses = tracker.process(rgb, timestamp_ms)
+                _result, poses = tracker.process(rgb, timestamp_ms)
                 fist_stop = any(is_emergency_fist(hand) for hand in poses)
                 if fist_stop:
                     pointer_detector.reset()
@@ -294,11 +234,9 @@ def run(args: argparse.Namespace) -> int:
                     click_pose = pose.handedness == "right" and pose.thumb_horizontal and not pose.pinch
                     if click_detector.update(click_pose, now):
                         controller.left_click()
-                        last_action = "left click"
                     right_click_pose = pose.handedness == "right" and pose.peace_sign
                     if right_click_detector.update(right_click_pose, now):
                         controller.right_click()
-                        last_action = "right click"
                     scroll_event = scroll_detector.update(
                         pose.finger_count,
                         pose.handedness,
@@ -307,19 +245,13 @@ def run(args: argparse.Namespace) -> int:
                     )
                     if scroll_event:
                         controller.scroll(scroll_event)
-                        last_action = "scroll up" if scroll_event > 0 else "scroll down"
                 else:
                     click_detector.reset()
                     right_click_detector.reset()
                     scroll_detector.reset()
 
-                if not args.no_preview:
-                    tracker.draw_landmarks(frame, result)
-                    draw_status(frame, poses, controller, last_action, pointer_mode)
-                    cv2.imshow("hand-mouse", frame)
-                    key = cv2.waitKey(1) & 0xFF
-                    if key in (27, ord("q")):
-                        break
+                if overlay is not None:
+                    overlay.update(poses, controller.position(), cursor_mapper.display)
                 else:
                     time.sleep(0.001)
     except KeyboardInterrupt:
@@ -327,7 +259,8 @@ def run(args: argparse.Namespace) -> int:
     finally:
         if capture is not None:
             capture.release()
-        cv2.destroyAllWindows()
+        if overlay is not None:
+            overlay.close()
     return 0
 
 

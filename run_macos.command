@@ -145,6 +145,11 @@ if [[ -z "$VENV_PY" ]]; then
     }
 fi
 
+if ! "$VENV_PY" -c 'import PySide6.QtWidgets' >/dev/null 2>&1; then
+    echo "Installing desktop skeleton dependencies..."
+    "$VENV_PY" -m pip install -e ".[dev]" || exit 1
+fi
+
 echo "Running tests..."
 "$VENV_PY" -m pytest || {
     echo "Tests failed. Live mouse control will not start."
@@ -152,7 +157,7 @@ echo "Running tests..."
 }
 
 if confirm_yes "All tests passed. Start live mouse control now?"; then
-    echo "Starting live mode with skeleton preview. Press q/ESC in preview or Ctrl+C in terminal to stop."
+    echo "Starting live mode with desktop skeleton lines. Press Ctrl+C in terminal to stop."
     "$VENV_PY" run_hand_mouse.py --live
 else
     echo "Tests passed. Live mode was not started."

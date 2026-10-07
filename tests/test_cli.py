@@ -74,8 +74,8 @@ def runtime(monkeypatch):
     import cv2
 
     state = SimpleNamespace(
-        closed=0, released=0, destroyed=0, draws=0, previews=0,
-        opened=True, frames=[], poses=[], moves=[], times=iter([0.0]),
+        closed=0, released=0, overlay_closed=0, updates=[],
+        opened=True, frames=[], poses=[], moves=[], position=(960, 540), times=iter([0.0]),
     )
 
     class FakeTracker:
@@ -93,9 +93,6 @@ def runtime(monkeypatch):
 
         def process(self, frame, timestamp):
             return None, state.poses.pop(0)
-
-        def draw_landmarks(self, frame, result):
-            state.draws += 1
 
     class FakeCapture:
         def __init__(self, *args):
@@ -120,27 +117,37 @@ def runtime(monkeypatch):
             self.live = kwargs["live"]
 
         def position(self):
-            return 960, 540
+            return state.position
 
         def display_for_position(self, position):
             return 1920, 1080
 
         def move_cursor(self, position):
             state.moves.append(position)
+            state.position = position
 
-    def destroy():
-        state.destroyed += 1
+    from hand_mouse import overlay
 
-    def show(*args):
-        state.previews += 1
+    class FakeOverlay:
+        def __init__(self, live=False):
+            pass
+
+        def update(self, hands, cursor_position=None, display=None):
+            state.updates.append((hands, cursor_position, display))
+
+        def close(self):
+            state.overlay_closed += 1
+
+    def unexpected_camera_window(*args):
+        pytest.fail("the desktop overlay must not open or draw a camera window")
 
     monkeypatch.setattr(cli, "InputController", FakeController)
     monkeypatch.setattr(tracker, "MediaPipeHandTracker", FakeTracker)
     monkeypatch.setattr(cv2, "VideoCapture", FakeCapture)
-    monkeypatch.setattr(cv2, "destroyAllWindows", destroy)
-    monkeypatch.setattr(cv2, "imshow", show)
-    monkeypatch.setattr(cv2, "waitKey", lambda delay: ord("q"))
-    monkeypatch.setattr(cli, "draw_status", lambda *args: None)
+    monkeypatch.setattr(overlay, "SkeletonOverlay", FakeOverlay)
+    monkeypatch.setattr(cv2, "imshow", unexpected_camera_window)
+    monkeypatch.setattr(cv2, "putText", unexpected_camera_window)
+    monkeypatch.setattr(cv2, "circle", unexpected_camera_window)
     monkeypatch.setattr(cli.time, "monotonic", lambda: next(state.times))
     monkeypatch.setattr(cli.time, "sleep", lambda duration: None)
     state.controller_class = FakeController
@@ -149,7 +156,7 @@ def runtime(monkeypatch):
 
 def test_camera_read_failure_returns_failure_and_releases_resources(runtime) -> None:
     assert cli.main(["--no-preview"]) == 1
-    assert (runtime.closed, runtime.released, runtime.destroyed) == (1, 1, 1)
+    assert (runtime.closed, runtime.released, runtime.overlay_closed) == (1, 1, 0)
 
 
 def test_camera_open_failure_releases_resources(runtime) -> None:
@@ -165,16 +172,61 @@ def test_startup_failure_releases_resources(runtime, monkeypatch) -> None:
     monkeypatch.setattr(runtime.controller_class, "position", fail)
     with pytest.raises(RuntimeError, match="display lookup failed"):
         cli.main(["--no-preview"])
-    assert (runtime.closed, runtime.released, runtime.destroyed) == (1, 1, 1)
+    assert (runtime.closed, runtime.released, runtime.overlay_closed) == (1, 1, 0)
 
 
-def test_preview_draws_skeleton_and_quit_releases_resources(runtime) -> None:
+def test_default_output_is_only_desktop_skeleton_and_resources_close(runtime) -> None:
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8)]
+    runtime.poses = [[]]
+    runtime.times = iter([0.0, 0.1])
+    assert cli.main([]) == 1
+    assert len(runtime.updates) == 1
+    assert (runtime.closed, runtime.released, runtime.overlay_closed) == (1, 1, 1)
+
+
+def test_no_preview_disables_the_desktop_overlay(runtime) -> None:
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8)]
+    runtime.poses = [[]]
+    runtime.times = iter([0.0, 0.1])
+    assert cli.main(["--no-preview"]) == 1
+    assert runtime.updates == []
+    assert runtime.overlay_closed == 0
+
+
+def test_overlay_receives_current_cursor_after_movement(runtime) -> None:
+    hands = [pinching_hand() for _ in range(3)]
+    hands[-1].points[[4, 8], 0] += 0.1
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in hands]
+    runtime.poses = [[hand] for hand in hands]
+    runtime.times = iter([0.0, 0.1, 0.4, 0.5])
+    assert cli.main([]) == 1
+    assert runtime.moves
+    assert runtime.updates[-1][1] == runtime.moves[-1]
+
+
+def test_overlay_closes_on_keyboard_interrupt(runtime, monkeypatch) -> None:
+    from hand_mouse import overlay
+
+    def interrupt(*args):
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr(overlay.SkeletonOverlay, "update", interrupt)
     runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8)]
     runtime.poses = [[]]
     runtime.times = iter([0.0, 0.1])
     assert cli.main([]) == 0
-    assert (runtime.draws, runtime.previews) == (1, 1)
-    assert (runtime.closed, runtime.released, runtime.destroyed) == (1, 1, 1)
+    assert (runtime.closed, runtime.released, runtime.overlay_closed) == (1, 1, 1)
+
+
+def test_overlay_startup_failure_releases_camera_and_tracker(runtime, monkeypatch) -> None:
+    from hand_mouse import overlay
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("no desktop screen is available")
+
+    monkeypatch.setattr(overlay.SkeletonOverlay, "__init__", fail)
+    assert cli.main([]) == 2
+    assert (runtime.closed, runtime.released, runtime.overlay_closed) == (1, 1, 0)
 
 
 def test_reliable_pinch_skips_local_tracking_and_loss_uses_fallback(runtime, monkeypatch) -> None:
