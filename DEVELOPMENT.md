@@ -36,12 +36,12 @@ run_hand_mouse.py # 未安装项目时的源码入口
 
 ## 动作契约
 
-- `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定 1000ms 后返回 `1` 并按间隔持续返回，右手张开稳定 1000ms 后返回 `-1` 并按间隔持续返回；手掌收起后停止。
+- `OpenPalmScrollDetector.update(finger_count, handedness, now)`：左手张开稳定 500ms 后返回 `1` 并按间隔持续返回，右手张开稳定 500ms 后返回 `-1` 并按间隔持续返回；手掌收起后停止。
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)`：右手拇指横向姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开该姿态后再次进入才会重新触发。
 - `PeaceSignClickDetector.update(peace_sign, now)`：右手比耶姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；松开后再次进入才会重新触发右键。
 - `PinchPointerDetector.update(hands, now)`：右手拇指和食指捏合稳定后进入精细模式；分开后退出；整只右手暂时丢失时保留状态，由局部指尖追踪器决定是否继续。
-- `PinchPointTracker`：在捏合进入后分别追踪拇指尖和食指尖，整只手关键点暂时丢失时输出两个指尖的中点。
-- `CursorMapper`：将捏合中点的归一化摄像头坐标映射到进入精细模式时鼠标所在显示器的完整边界；进入时保留当前鼠标位置并平滑消除初始偏差，当前模式不会自动切换显示器。
+- `PinchPointTracker`：捏合时保存最近的可靠帧和关键点，整只手关键点暂时丢失后才启动拇指尖和食指尖局部追踪，并输出两个指尖的中点；恢复识别后重新保存参考帧。
+- `CursorMapper`：将捏合中点的归一化摄像头坐标映射到进入精细模式时鼠标所在显示器的完整边界；进入时保留当前鼠标位置并平滑消除初始偏差，当前模式不会自动切换显示器；死区以累计位移判断，停手后继续平滑收敛到最后有效目标。
 - 任意一只手的拳头都会触发全局急停，重置滚动、点击、捏合状态和局部追踪器。
 - `InputController` 是唯一负责发送真实输入事件的类，提供左键和右键发送方法。检测器和单元测试不能直接调用 PyAutoGUI。
 
@@ -81,7 +81,7 @@ python -m hand_mouse --live
 - `--scroll-stable-time`：张开手掌持续多久后确认滚动。
 - `--scroll-repeat-interval`：连续滚动事件之间的间隔。
 - `--click-stable-time`：右手拇指横向姿态持续多久后确认左键。
-- `--pointer-stable-time` / `--pinch-stable-time`：右手拇指和食指捏合持续多久后进入鼠标模式，默认 500ms。
+- `--pointer-stable-time` / `--pinch-stable-time`：右手拇指和食指捏合持续多久后进入鼠标模式，默认 300ms。
 - `--cursor-smoothing`：摄像头绝对目标位置的平滑系数。
 - `--fine-sensitivity`：低速时鼠标跟随目标的基础比例。
 - `--cursor-max-gain`：高速时鼠标跟随目标的最大比例。

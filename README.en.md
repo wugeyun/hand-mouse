@@ -12,16 +12,16 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 
 | Gesture | Output | Notes |
 | --- | --- | --- |
-| Hold the left palm open | Continuously scroll page up | Starts after about 1000ms and repeats while held |
-| Hold the right palm open | Continuously scroll page down | Starts after about 1000ms and repeats while held |
-| Extend the right thumb sideways | Left click | Other fingers folded; fires once after about 500ms |
-| Make a V sign with the right hand | Right click | Index and middle extended, other long fingers folded; fires once after about 500ms |
-| Pinch the right thumb and index finger | Fine mouse movement | Arms after about 500ms; the pinch midpoint controls the cursor until release |
+| Hold the left palm open | Continuously scroll page up | Starts after about 500ms and repeats while held |
+| Hold the right palm open | Continuously scroll page down | Starts after about 500ms and repeats while held |
+| Extend the right thumb sideways | Left click | Other fingers folded; fires once after about 300ms |
+| Make a V sign with the right hand | Right click | Index and middle extended, other long fingers folded; fires once after about 300ms |
+| Pinch the right thumb and index finger | Fine mouse movement | Arms after about 300ms; the pinch midpoint controls the cursor until release |
 | Make a fist with either hand | Global emergency stop | Immediately stops scrolling, clicking, and pointer movement |
 
-Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Scrolling starts after 1000ms of stability and repeats while the palm is held open; closing the hand or removing it from the frame stops scrolling immediately.
+Scroll direction no longer depends on vertical movement. The left palm always scrolls up and the right palm always scrolls down. Scrolling starts after 500ms of stability and repeats while the palm is held open; closing the hand or removing it from the frame stops scrolling immediately.
 
-Pinching the right thumb and index finger for about 500ms arms fine cursor movement. The midpoint between the two fingertips controls the cursor, and separating them stops movement immediately. The current cursor position is preserved when the pinch starts; if the full hand temporarily disappears, local fingertip tracking can continue the gesture.
+Pinching the right thumb and index finger for about 300ms arms fine cursor movement. The midpoint between the two fingertips controls the cursor, and separating them stops movement immediately. The current cursor position is preserved when the pinch starts; reliable hand landmarks are used directly, and local fingertip tracking starts from the latest reliable frame only if the full hand temporarily disappears.
 
 Cursor movement maps the normalized pinch midpoint in the camera frame to the full bounds of the display currently containing the mouse, including the menu bar and Dock/taskbar. Reaching a camera edge therefore reaches the corresponding display edge. Entering fine mode keeps the current cursor position and smoothly removes the initial offset instead of jumping. Multi-monitor mapping is selected from the display containing the cursor each time fine mode starts, and the active mode does not switch displays automatically. Fast motion still increases target-follow speed, while a small dead zone filters stationary hand jitter.
 
@@ -144,11 +144,11 @@ python run_hand_mouse.py
 
 Test these actions in order:
 
-- Hold the left palm open for about 1000ms; it should keep printing `scroll up`.
-- Hold the right palm open for about 1000ms; it should keep printing `scroll down`.
-- Hold the right thumb sideways for about 500ms; the terminal should print one `left click`. Holding it must not repeat the click.
-- Hold a right-hand V sign for about 500ms; the terminal should print one `right click`. Holding it must not repeat the click.
-- Pinch the right thumb and index finger for about 500ms; the preview `POINTER` state should become `fine`, and separating them should stop movement.
+- Hold the left palm open for about 500ms; it should keep printing `scroll up`.
+- Hold the right palm open for about 500ms; it should keep printing `scroll down`.
+- Hold the right thumb sideways for about 300ms; the terminal should print one `left click`. Holding it must not repeat the click.
+- Hold a right-hand V sign for about 300ms; the terminal should print one `right click`. Holding it must not repeat the click.
+- Pinch the right thumb and index finger for about 300ms; the preview `POINTER` state should become `fine`, and separating them should stop movement.
 - In fine mode, move the pinch point to all four camera edges; the cursor should stop at the matching edge of the active display.
 - Make a fist with either hand; `FIST STOP` should become `True` and all actions should stop immediately.
 
@@ -227,7 +227,7 @@ Windows: double-click `run_windows.bat`. You can also run it from PowerShell:
 
 On the first run, the scripts look for Python 3.12, 3.11, and 3.10 in that order. If no supported version is available, they offer a version choice. macOS uses Homebrew for installation, and Windows uses `winget`; if the required tool is unavailable, the script opens the official Python download page and asks you to run it again. The default virtual-environment directory is `.venv312`; press Enter to accept it or enter a custom name.
 
-After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live --no-preview`; press `Ctrl+C` to stop it.
+After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and shows the camera feed, live finger skeleton, and recognition status by default. Switch to the target application so it receives input focus. Press `q` / `Esc` in the preview or `Ctrl+C` in the terminal to stop. For manual startup, use `--no-preview` to hide the preview.
 
 ## Run
 
@@ -253,13 +253,15 @@ Useful tuning options:
 
 `--scroll-amount` is expressed in logical wheel notches. Windows converts this to the native system wheel unit automatically; macOS keeps its native scroll units.
 
+Stability times and the deadzone may be zero. The camera index must be nonnegative; frame dimensions, scroll amount, repeat interval, and gains must be positive. `--cursor-smoothing` must be in `(0, 1]`, and all numeric parameters must be finite. Invalid parameters are rejected before the camera opens.
+
 ```bash
 python -m hand_mouse --live \
   --scroll-amount 4 \
-  --scroll-stable-time 1.00 \
+  --scroll-stable-time 0.50 \
   --scroll-repeat-interval 0.25 \
-  --click-stable-time 0.50 \
-  --pinch-stable-time 0.50 \
+  --click-stable-time 0.30 \
+  --pinch-stable-time 0.30 \
   --fine-sensitivity 0.35 \
   --cursor-max-gain 3.00 \
   --cursor-acceleration-speed 1.00 \

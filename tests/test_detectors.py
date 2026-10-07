@@ -1,3 +1,6 @@
+import sys
+from types import SimpleNamespace
+
 import numpy as np
 
 from hand_mouse import tracker
@@ -352,8 +355,18 @@ def test_open_palm_does_not_enter_index_pointer_mode() -> None:
     assert not is_index_pointing(points)
 
 
-def test_dry_run_controller_never_needs_to_send_input() -> None:
+def test_dry_run_controller_never_needs_to_send_input(monkeypatch) -> None:
+    events = []
+    backend = SimpleNamespace(
+        click=lambda: events.append("left"),
+        rightClick=lambda: events.append("right"),
+        scroll=lambda amount: events.append("scroll"),
+        moveTo=lambda x, y, duration: events.append("move"),
+    )
+    monkeypatch.setitem(sys.modules, "pyautogui", backend)
     controller = InputController(live=False, scroll_amount=1)
     controller.left_click()
     controller.right_click()
     controller.scroll(1)
+    controller.move_cursor((10, 20))
+    assert events == []

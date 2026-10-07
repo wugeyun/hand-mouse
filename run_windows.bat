@@ -46,8 +46,8 @@ if errorlevel 1 (
     goto :done
 )
 
-echo Starting live mode. Press Ctrl+C to stop.
-"%VENV_PY%" run_hand_mouse.py --live --no-preview
+echo Starting live mode with skeleton preview. Press q/ESC in preview or Ctrl+C in terminal to stop.
+"%VENV_PY%" run_hand_mouse.py --live
 set "RUN_RESULT=%ERRORLEVEL%"
 if not "%RUN_RESULT%"=="0" goto :failed
 goto :done

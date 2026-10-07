@@ -170,7 +170,7 @@ def make_pose(hand_landmarks, handedness: str | None = None) -> HandPose:
 class HorizontalThumbClickDetector:
     """Emit one left click after a stable horizontal-thumb state."""
 
-    def __init__(self, stable_time: float = 0.5) -> None:
+    def __init__(self, stable_time: float = 0.3) -> None:
         self.stable_time = stable_time
         self.active = False
         self.candidate_since: float | None = None
@@ -197,7 +197,7 @@ class HorizontalThumbClickDetector:
 class PeaceSignClickDetector:
     """Emit one right click after a stable right-hand V sign."""
 
-    def __init__(self, stable_time: float = 0.5) -> None:
+    def __init__(self, stable_time: float = 0.3) -> None:
         self.stable_time = stable_time
         self.active = False
         self.candidate_since: float | None = None
@@ -224,7 +224,7 @@ class PeaceSignClickDetector:
 class OpenPalmScrollDetector:
     """Continuously scroll while a stable left or right open palm is held."""
 
-    def __init__(self, stable_time: float = 1.0, repeat_interval: float = 0.25) -> None:
+    def __init__(self, stable_time: float = 0.5, repeat_interval: float = 0.25) -> None:
         self.stable_time = stable_time
         self.repeat_interval = repeat_interval
         self.active_hand: str | None = None

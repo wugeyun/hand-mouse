@@ -17,7 +17,7 @@ POINTER_FINE = "fine"
 class PinchPointerDetector:
     """Enter pointer mode after a stable right thumb-index pinch."""
 
-    def __init__(self, stable_time: float = 0.5) -> None:
+    def __init__(self, stable_time: float = 0.3) -> None:
         self.stable_time = stable_time
         self.mode = POINTER_IDLE
         self.candidate_since: float | None = None
@@ -65,15 +65,22 @@ class PinchPointTracker:
         self._tips: tuple[_TrackedTip, _TrackedTip] | None = None
         self._frame_size: tuple[int, int] | None = None
         self._pinch_limit_pixels = 0.0
+        self._reference: tuple[Any, np.ndarray, float] | None = None
 
     @property
     def active(self) -> bool:
-        return self._tips is not None
+        return self._tips is not None or self._reference is not None
 
     def reset(self) -> None:
         self._tips = None
         self._frame_size = None
         self._pinch_limit_pixels = 0.0
+        self._reference = None
+
+    def remember(self, frame: Any, points: np.ndarray, box_scale: float) -> None:
+        """Save reliable landmarks; create local trackers only if the hand is lost."""
+        self.reset()
+        self._reference = frame.copy(), points.copy(), box_scale
 
     @staticmethod
     def _create_tracker() -> Any | None:
@@ -140,6 +147,10 @@ class PinchPointTracker:
 
     def update(self, frame: Any) -> np.ndarray | None:
         """Return a normalized pinch midpoint, or stop when tracking loses either tip."""
+        if self._reference is not None:
+            reference_frame, points, box_scale = self._reference
+            if not self.start(reference_frame, points, box_scale):
+                return None
         if self._tips is None or self._frame_size is None:
             return None
         height, width = frame.shape[:2]
@@ -212,6 +223,7 @@ class CursorMapper:
         self.last_point: np.ndarray | None = None
         self.last_time: float | None = None
         self.filtered_target: np.ndarray | None = None
+        self.target_point: np.ndarray | None = None
         self.transition_offset = np.zeros(2, dtype=np.float32)
 
     @staticmethod
@@ -259,11 +271,13 @@ class CursorMapper:
         self.last_point = None
         self.last_time = None
         self.filtered_target = None
+        self.target_point = None
         self.transition_offset.fill(0)
         if mode == POINTER_FINE and control_point is not None:
             point = np.asarray(control_point, dtype=np.float32).copy()
             target = self._target_for_point(point)
             self.filtered_target = target
+            self.target_point = point.copy()
             self.transition_offset = self.cursor_position - target
             self.last_point = point
             self.last_time = now
@@ -288,12 +302,14 @@ class CursorMapper:
         self.last_point = point.copy()
         self.last_time = now
         movement = float(np.linalg.norm(delta))
-        if elapsed <= 1e-4 or self.filtered_target is None:
+        if elapsed <= 1e-4 or self.filtered_target is None or self.target_point is None:
             return None
 
-        if movement >= self.deadzone:
-            target = self._target_for_point(point)
-            self.filtered_target += (target - self.filtered_target) * self.smoothing
+        # Compare with the last accepted point so slow motion can accumulate.
+        if float(np.linalg.norm(point - self.target_point)) >= self.deadzone:
+            self.target_point = point.copy()
+        target = self._target_for_point(self.target_point)
+        self.filtered_target += (target - self.filtered_target) * self.smoothing
 
         speed_ratio = min(movement / elapsed / self.acceleration_speed, 1.0)
         gain = self.fine_sensitivity + (self.max_gain - self.fine_sensitivity) * speed_ratio**2
@@ -303,4 +319,4 @@ class CursorMapper:
         target = self._clamp_position(self.filtered_target + self.transition_offset)
         self.cursor_position += (target - self.cursor_position) * follow_alpha
         self.cursor_position = self._clamp_position(self.cursor_position)
-        return int(self.cursor_position[0]), int(self.cursor_position[1])
+        return round(float(self.cursor_position[0])), round(float(self.cursor_position[1]))

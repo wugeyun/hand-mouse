@@ -7,12 +7,10 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 
-from .detectors import HandPose, make_pose
-
+from .detectors import make_pose
 
 MODEL_URL = "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task"
 BUNDLED_MODEL_PATH = Path(__file__).resolve().parent / "models" / "hand_landmarker.task"
@@ -20,7 +18,7 @@ DEFAULT_MODEL_PATH = Path.home() / ".cache" / "hand-mouse" / "hand_landmarker.ta
 MIN_MODEL_SIZE = 100_000
 
 
-def resolve_model_path(model_path: Optional[str]) -> Path:
+def resolve_model_path(model_path: str | None) -> Path:
     if model_path:
         path = Path(model_path).expanduser()
         if not path.is_file():
@@ -57,7 +55,7 @@ class MediaPipeHandTracker:
 
     def __init__(
         self,
-        model_path: Optional[str] = None,
+        model_path: str | None = None,
         min_detection_confidence: float = 0.6,
         min_presence_confidence: float = 0.6,
         min_tracking_confidence: float = 0.6,
@@ -127,7 +125,7 @@ class MediaPipeHandTracker:
     def close(self) -> None:
         self._landmarker.close()
 
-    def __enter__(self) -> "MediaPipeHandTracker":
+    def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:

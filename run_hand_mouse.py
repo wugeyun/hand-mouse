@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Source-checkout entry point. The installed command is ``hand-mouse``."""
 
-from pathlib import Path
 import sys
+from pathlib import Path
 
 
 def main() -> int:

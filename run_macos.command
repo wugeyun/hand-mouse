@@ -152,8 +152,8 @@ echo "Running tests..."
 }
 
 if confirm_yes "All tests passed. Start live mouse control now?"; then
-    echo "Starting live mode. Press Ctrl+C to stop."
-    "$VENV_PY" run_hand_mouse.py --live --no-preview
+    echo "Starting live mode with skeleton preview. Press q/ESC in preview or Ctrl+C in terminal to stop."
+    "$VENV_PY" run_hand_mouse.py --live
 else
     echo "Tests passed. Live mode was not started."
 fi

@@ -36,12 +36,12 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 
 ## Action contracts
 
-- `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after 1000ms of a stable left open palm and repeats at the configured interval; it returns `-1` for a stable right open palm. Closing the palm stops scrolling.
+- `OpenPalmScrollDetector.update(finger_count, handedness, now)` returns `1` after 500ms of a stable left open palm and repeats at the configured interval; it returns `-1` for a stable right open palm. Closing the palm stops scrolling.
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)` returns `True` after `--click-stable-time` seconds of a stable right horizontal-thumb pose and `False` while the state is held or for other states. Leaving the pose is required before another click can fire.
 - `PeaceSignClickDetector.update(peace_sign, now)` returns `True` after `--click-stable-time` seconds of a stable right-hand V sign and `False` while the state is held or for other states. Leaving the pose is required before another right click can fire.
 - `PinchPointerDetector.update(hands, now)` arms fine mode after a stable right thumb-index pinch. Separating the fingertips exits; a temporarily missing right hand remains active while the local tracker can continue.
-- `PinchPointTracker` tracks the thumb and index fingertips independently after pinch activation and supplies their midpoint when the full hand landmarks disappear.
-- `CursorMapper` maps the normalized pinch midpoint to the full bounds of the display containing the cursor when fine mode starts. It preserves the current cursor position, then smoothly removes the initial offset; the active mode does not switch displays automatically.
+- `PinchPointTracker` saves the latest reliable frame and landmarks during a pinch. Local thumb and index fingertip tracking starts only when the full hand landmarks disappear and supplies their midpoint; recovered landmarks refresh the reference frame.
+- `CursorMapper` maps the normalized pinch midpoint to the full bounds of the display containing the cursor when fine mode starts. It preserves the current cursor position, then smoothly removes the initial offset; the active mode does not switch displays automatically. The deadzone uses accumulated movement, and smoothing continues toward the last accepted target after the hand stops.
 - A fist with either hand is a global emergency stop that resets scrolling, clicking, pinch state, and local tracking.
 - `InputController` is the only class allowed to send real input events and provides left- and right-click methods. Detectors and unit tests must not call PyAutoGUI directly.
 
@@ -81,7 +81,7 @@ Thresholds use normalized camera coordinates or relative projection sizes, so th
 - `--scroll-stable-time`: how long an open palm must remain stable before scrolling.
 - `--scroll-repeat-interval`: interval between continuous scroll events.
 - `--click-stable-time`: how long the right horizontal-thumb pose must remain stable before left click.
-- `--pointer-stable-time` / `--pinch-stable-time`: how long the right thumb-index pinch must remain stable before entering mouse mode; 500ms by default.
+- `--pointer-stable-time` / `--pinch-stable-time`: how long the right thumb-index pinch must remain stable before entering mouse mode; 300ms by default.
 - `--cursor-smoothing`: smoothing factor for the absolute camera target.
 - `--fine-sensitivity`: base target-follow ratio at low hand speed.
 - `--cursor-max-gain`: maximum target-follow ratio at high hand speed.
