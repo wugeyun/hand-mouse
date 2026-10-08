@@ -4,13 +4,52 @@ from __future__ import annotations
 
 import argparse
 import math
+import os
+import signal
 import sys
 import time
 from collections.abc import Sequence
+from contextlib import ExitStack, contextmanager
+from threading import Timer
 
 from . import __version__
 from .controller import InputController
 from .pointer import POINTER_FINE, POINTER_IDLE, CursorMapper, PinchPointerDetector, PinchPointTracker
+
+NATIVE_SHUTDOWN_TIMEOUT = 5.0
+
+
+def _force_runtime_exit(exit_code: int) -> None:
+    try:
+        os.write(2, b"Shutdown timed out; terminating this camera application.\n")
+    finally:
+        # Native MediaPipe worker threads can block Python's interpreter exit.
+        # This terminates only this process; its camera resources are released.
+        os._exit(exit_code)
+
+
+@contextmanager
+def _runtime_resources():
+    resources = ExitStack()
+    exit_code = 0
+    try:
+        yield resources
+    except KeyboardInterrupt:
+        raise
+    except BaseException:
+        exit_code = 1
+        raise
+    finally:
+        timer = None
+        if sys.platform == "darwin":
+            timer = Timer(NATIVE_SHUTDOWN_TIMEOUT, _force_runtime_exit, args=(exit_code,))
+            timer.daemon = True
+            timer.start()
+        try:
+            resources.close()
+        finally:
+            if timer is not None:
+                timer.cancel()
 
 
 def strictly_increasing_timestamp(elapsed_ms: int, previous_timestamp_ms: int) -> int:
@@ -117,8 +156,12 @@ def run(args: argparse.Namespace) -> int:
     capture = None
     overlay = None
     try:
-        with tracker:
+        with _runtime_resources() as resources:
+            resources.enter_context(tracker)
+            # LIFO: camera first, then overlay, then the native model.
+            resources.callback(lambda: overlay.close() if overlay is not None else None)
             capture = cv2.VideoCapture(args.camera)
+            resources.callback(capture.release)
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
             capture.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
             if not capture.isOpened():
@@ -256,13 +299,28 @@ def run(args: argparse.Namespace) -> int:
                     time.sleep(0.001)
     except KeyboardInterrupt:
         pass
-    finally:
-        if capture is not None:
-            capture.release()
-        if overlay is not None:
-            overlay.close()
     return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    return run(build_parser().parse_args(argv))
+    args = build_parser().parse_args(argv)
+    previous_handlers = {}
+    exit_requested = False
+
+    def request_exit(signum, frame) -> None:
+        nonlocal exit_requested
+        # Repeated key presses must not interrupt camera/model cleanup.
+        if not exit_requested:
+            exit_requested = True
+            raise KeyboardInterrupt
+
+    try:
+        if sys.platform == "darwin":
+            for exit_signal in (signal.SIGINT, signal.SIGTSTP, signal.SIGHUP, signal.SIGTERM):
+                previous_handlers[exit_signal] = signal.signal(exit_signal, request_exit)
+        return run(args)
+    except KeyboardInterrupt:
+        return 0
+    finally:
+        for exit_signal, previous_handler in previous_handlers.items():
+            signal.signal(exit_signal, previous_handler)

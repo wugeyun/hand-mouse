@@ -74,7 +74,7 @@ def runtime(monkeypatch):
     import cv2
 
     state = SimpleNamespace(
-        closed=0, released=0, overlay_closed=0, updates=[],
+        closed=0, released=0, overlay_closed=0, updates=[], lifecycle=[],
         opened=True, frames=[], poses=[], moves=[], position=(960, 540), times=iter([0.0]),
     )
 
@@ -83,6 +83,7 @@ def runtime(monkeypatch):
             pass
 
         def close(self):
+            state.lifecycle.append("tracker")
             state.closed += 1
 
         def __enter__(self):
@@ -110,6 +111,7 @@ def runtime(monkeypatch):
             return False, None
 
         def release(self):
+            state.lifecycle.append("camera")
             state.released += 1
 
     class FakeController:
@@ -136,6 +138,7 @@ def runtime(monkeypatch):
             state.updates.append((hands, cursor_position, display))
 
         def close(self):
+            state.lifecycle.append("overlay")
             state.overlay_closed += 1
 
     def unexpected_camera_window(*args):
@@ -267,3 +270,79 @@ def test_fist_and_pinch_release_cancel_pending_fallback(runtime, monkeypatch) ->
     runtime.times = iter([0.0, 0.1, 0.4, 0.5, 0.6, 0.7, 1.1, 1.2, 1.3])
     assert cli.main(["--no-preview"]) == 1
     assert runtime.moves == []
+
+
+def test_camera_releases_before_native_model_shutdown(runtime) -> None:
+    assert cli.main(["--no-preview"]) == 1
+    assert runtime.lifecycle == ["camera", "tracker"]
+
+
+def test_all_resources_close_even_if_overlay_cleanup_fails(runtime, monkeypatch) -> None:
+    from hand_mouse import overlay
+
+    def fail_close(self):
+        runtime.lifecycle.append("overlay")
+        raise RuntimeError("overlay shutdown failed")
+
+    monkeypatch.setattr(overlay.SkeletonOverlay, "close", fail_close)
+    with pytest.raises(RuntimeError, match="overlay shutdown failed"):
+        cli.main([])
+    assert runtime.lifecycle == ["camera", "overlay", "tracker"]
+
+
+@pytest.mark.parametrize("signal_name", ["SIGINT", "SIGTSTP", "SIGTERM", "SIGHUP"])
+def test_macos_exit_signals_cleanup_and_restore_handlers(runtime, monkeypatch, signal_name) -> None:
+    import signal
+
+    if not all(hasattr(signal, name) for name in ("SIGINT", "SIGTSTP", "SIGHUP", "SIGTERM")):
+        pytest.skip("Unix signal unavailable")
+    from hand_mouse import overlay
+
+    exit_signal = getattr(signal, signal_name)
+    previous_handler = signal.getsignal(exit_signal)
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+
+    def trigger(self, *args):
+        handler = signal.getsignal(exit_signal)
+        assert callable(handler), "exit must clean up instead of suspending Python"
+        handler(exit_signal, None)
+
+    monkeypatch.setattr(overlay.SkeletonOverlay, "update", trigger)
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8)]
+    runtime.poses = [[]]
+    runtime.times = iter([0.0, 0.1])
+    assert cli.main([]) == 0
+    assert runtime.lifecycle == ["camera", "overlay", "tracker"]
+    assert signal.getsignal(exit_signal) == previous_handler
+
+
+@pytest.mark.parametrize("raise_error, expected_code", [(False, 0), (True, 1)])
+def test_macos_native_shutdown_timeout_ends_only_the_child_process(tmp_path, raise_error, expected_code) -> None:
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    marker = tmp_path / "camera-released.txt"
+    script = """
+import sys
+import time
+from pathlib import Path
+from hand_mouse import cli
+cli.sys.platform = 'darwin'
+cli.NATIVE_SHUTDOWN_TIMEOUT = 0.15
+with cli._runtime_resources() as resources:
+    resources.callback(lambda: time.sleep(60))
+    resources.callback(lambda: Path(sys.argv[1]).write_text('released'))
+    if sys.argv[2] == 'error':
+        raise RuntimeError('runtime failed before shutdown')
+raise SystemExit('shutdown timeout failed to terminate the child')
+"""
+    result = subprocess.run(
+        [sys.executable, "-u", "-c", script, str(marker), "error" if raise_error else "normal"],
+        capture_output=True, text=True, timeout=10, check=False,
+        env={**os.environ, "PYTHONPATH": str(Path(cli.__file__).resolve().parents[1])},
+    )
+    assert result.returncode == expected_code
+    assert marker.read_text() == "released"
+    assert "Shutdown timed out" in result.stderr

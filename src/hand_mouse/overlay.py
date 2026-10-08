@@ -65,6 +65,7 @@ class _SkeletonWindow(QWidget):
         painter.fillRect(self.rect(), Qt.GlobalColor.transparent)
         painter.setCompositionMode(QPainter.CompositionMode.CompositionMode_SourceOver)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setOpacity(0.5)
         painter.setPen(QPen(QColor("#00e676"), 3, Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap))
         for start, end in self.lines:
             painter.drawLine(QLineF(*start, *end))

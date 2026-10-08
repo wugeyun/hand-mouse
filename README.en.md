@@ -205,6 +205,7 @@ Switch to the target application after the process starts and make sure its wind
 - Windows: allow Python or the terminal to access the camera; use `py --list` to inspect installed versions.
 - `No module named cv2` or `mediapipe`: confirm that `.venv312` is active and run `python -m pip install -e .`; do not use another Python's `pip`.
 - Missing or incomplete clone: confirm that `src/hand_mouse/models/hand_landmarker.task` exists; you can also prepare the model manually and run `python run_hand_mouse.py --model PATH`.
+- macOS exit: use `Ctrl+C`. `Ctrl+Z`, terminal closure, and normal termination also clean up and exit. The camera closes before the overlay and model; if native cleanup stalls, this program terminates after 5 seconds. The system camera light may take a few more seconds to turn off.
 - `Cannot open camera 0`: check camera permissions or try `--camera 1` or `--camera 2`.
 - Dry-run works but live input does not: check macOS Accessibility permissions and the focused target window first.
 
@@ -227,7 +228,7 @@ Windows: double-click `run_windows.bat`. You can also run it from PowerShell:
 
 On the first run, the scripts look for Python 3.12, 3.11, and 3.10 in that order. If no supported version is available, they offer a version choice. macOS uses Homebrew for installation, and Windows uses `winget`; if the required tool is unavailable, the script opens the official Python download page and asks you to run it again. The default virtual-environment directory is `.venv312`; press Enter to accept it or enter a custom name.
 
-After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and draws only live skeleton lines over the desktop: a transparent background, no camera image, landmark dots, or status text, with mouse clicks passing through and input focus preserved. Camera coordinates fill the full bounds of the display under the cursor. During a right-hand pinch, the entire skeleton is translated together so the thumb-index midpoint matches the actual cursor position. Lines clear as soon as the hand disappears. Press `Ctrl+C` in the terminal to stop, or use `--no-preview` for manual startup without the skeleton overlay.
+After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and draws only live skeleton lines over the desktop: a transparent background, no camera image, landmark dots, or status text, with mouse clicks passing through and input focus preserved. Bone lines use 50% opacity. Camera coordinates fill the full bounds of the display under the cursor. During a right-hand pinch, the entire skeleton is translated together so the thumb-index midpoint matches the actual cursor position. Lines clear as soon as the hand disappears. Press `Ctrl+C` in the terminal to stop, or use `--no-preview` for manual startup without the skeleton overlay.
 
 ## Run
 

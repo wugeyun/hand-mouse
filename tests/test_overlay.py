@@ -94,3 +94,15 @@ def test_overlay_has_no_camera_background_and_clears_when_hands_disappear(overla
     image.fill(Qt.GlobalColor.transparent)
     overlay.window.render(image)
     assert image.pixelColor(image.width() // 2, round((image.height() - 1) * 0.25)).alpha() == 0
+
+
+def test_bone_stroke_uses_half_opacity(overlay) -> None:
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QImage
+
+    overlay.window.lines = [((20.0, 20.0), (200.0, 20.0))]
+    image = QImage(overlay.window.size(), QImage.Format.Format_ARGB32)
+    image.fill(Qt.GlobalColor.transparent)
+    overlay.window.render(image)
+    assert 126 <= image.pixelColor(100, 20).alpha() <= 129
+    assert image.pixelColor(100, 100).alpha() == 0
