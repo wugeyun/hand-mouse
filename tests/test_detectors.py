@@ -8,7 +8,6 @@ from hand_mouse.controller import DisplayBounds, InputController, select_display
 from hand_mouse.detectors import (
     HandPose,
     HorizontalThumbClickDetector,
-    OpenPalmScrollDetector,
     PeaceSignClickDetector,
     count_extended_fingers,
     is_emergency_fist,
@@ -17,15 +16,10 @@ from hand_mouse.detectors import (
     is_index_motion_ready,
     is_index_pointing,
     is_peace_sign,
-    is_thumb_index_pinch,
-    pinch_point,
 )
 from hand_mouse.pointer import (
     POINTER_FINE,
-    POINTER_IDLE,
     CursorMapper,
-    PinchPointerDetector,
-    PinchPointTracker,
 )
 
 
@@ -118,18 +112,6 @@ def peace_pose(handedness: str) -> HandPose:
     )
 
 
-def test_open_palms_map_left_and_right_hands_to_fixed_scroll_directions() -> None:
-    detector = OpenPalmScrollDetector(stable_time=1.0, repeat_interval=0.25)
-    assert detector.update(5, "left", 0.0) == 0
-    assert detector.update(5, "left", 0.9) == 0
-    assert detector.update(5, "left", 1.0) == 1
-    assert detector.update(5, "left", 1.1) == 0
-    assert detector.update(5, "left", 1.25) == 1
-    assert detector.update(4, "left", 1.4) == 0
-    assert detector.update(5, "right", 1.5) == 0
-    assert detector.update(5, "right", 2.5) == -1
-
-
 def test_horizontal_thumb_state_emits_one_left_click_until_released() -> None:
     detector = HorizontalThumbClickDetector(stable_time=0.5)
     assert not detector.update(True, 0.0)
@@ -139,21 +121,6 @@ def test_horizontal_thumb_state_emits_one_left_click_until_released() -> None:
     assert not detector.update(False, 0.7)
     assert not detector.update(True, 0.8)
     assert detector.update(True, 1.3)
-
-
-def test_right_pinch_arms_fine_pointer_and_release_stops_it() -> None:
-    detector = PinchPointerDetector(stable_time=0.5)
-    right = pinching_pose("right")
-    released = pointing_pose("right")
-    assert is_thumb_index_pinch(right.points, right.box_scale)
-    assert np.allclose(pinch_point(right.points), right.points[4, :2])
-    assert detector.update([right], 0.0) == POINTER_IDLE
-    assert detector.update([right], 0.4) == POINTER_IDLE
-    assert detector.update([right], 0.5) == POINTER_FINE
-    assert detector.update([released], 0.6) == POINTER_IDLE
-    assert detector.update([right], 1.0) == POINTER_IDLE
-    assert detector.update([right], 1.5) == POINTER_FINE
-    assert detector.update([], 1.7) == POINTER_FINE
 
 
 def test_right_peace_sign_emits_one_right_click_until_released() -> None:
@@ -256,43 +223,6 @@ def test_any_fist_is_an_emergency_stop_but_a_pinch_is_not() -> None:
     assert is_emergency_fist(left_fist)
     assert not is_emergency_fist(pinching)
     assert not is_emergency_fist(horizontal_thumb)
-
-
-def test_open_palm_scroll_is_suppressed_while_pinching() -> None:
-    detector = OpenPalmScrollDetector(stable_time=1.0, repeat_interval=0.25)
-
-    assert detector.update(5, "right", 0.0, pinch=True) == 0
-    assert detector.update(5, "right", 1.0, pinch=True) == 0
-    assert detector.update(5, "right", 1.1, pinch=False) == 0
-
-
-def test_local_pinch_tracker_returns_the_moving_midpoint(monkeypatch) -> None:
-    class FakeTracker:
-        def __init__(self) -> None:
-            self.box = None
-
-        def init(self, _frame, box) -> bool:
-            self.box = box
-            return True
-
-        def update(self, frame):
-            shift = float(frame[0, 0, 0])
-            x, y, width, height = self.box
-            return True, (x + shift, y, width, height)
-
-    monkeypatch.setattr(PinchPointTracker, "_create_tracker", staticmethod(FakeTracker))
-    frame = np.zeros((100, 100, 3), dtype=np.uint8)
-    points = np.zeros((21, 3), dtype=np.float32)
-    points[4, :2] = (0.40, 0.50)
-    points[8, :2] = (0.45, 0.50)
-    tracker = PinchPointTracker()
-
-    assert tracker.start(frame, points, box_scale=0.2)
-    frame[0, 0, 0] = 5
-    midpoint = tracker.update(frame)
-
-    assert midpoint is not None
-    assert np.allclose(midpoint, (0.425 + 5 / 99, 0.5), atol=0.01)
 
 
 def test_count_extended_fingers_distinguishes_four_and_five() -> None:

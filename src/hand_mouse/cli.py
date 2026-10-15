@@ -14,7 +14,7 @@ from threading import Timer
 
 from . import __version__
 from .controller import InputController
-from .pointer import POINTER_FINE, POINTER_IDLE, CursorMapper, PinchPointerDetector, PinchPointTracker
+from .pointer import POINTER_FINE, POINTER_IDLE, CursorMapper, PalmPointerDetector
 
 NATIVE_SHUTDOWN_TIMEOUT = 5.0
 
@@ -102,8 +102,14 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--live", action="store_true", help="send real mouse events; default is dry-run")
     parser.add_argument("--no-preview", action="store_true", help="hide the desktop skeleton overlay")
     parser.add_argument("--scroll-amount", type=positive_int, default=5)
-    parser.add_argument("--scroll-stable-time", type=nonnegative_float, default=0.5)
-    parser.add_argument("--scroll-repeat-interval", type=positive_float, default=0.25)
+    parser.add_argument(
+        "--scroll-stable-time", type=nonnegative_float, default=0.1,
+        help="upright left-palm hold duration before each tilt can scroll",
+    )
+    parser.add_argument(
+        "--scroll-repeat-interval", type=positive_float, default=0.25,
+        help="legacy option; tilt scrolling emits once until the palm returns upright",
+    )
     parser.add_argument("--click-stable-time", type=nonnegative_float, default=0.3)
     parser.add_argument(
         "--pointer-stable-time",
@@ -111,7 +117,7 @@ def build_parser() -> argparse.ArgumentParser:
         dest="pointer_stable_time",
         type=nonnegative_float,
         default=0.3,
-        help="stable thumb-index pinch duration before mouse movement starts",
+        help="stable right open-palm duration before mouse movement starts",
     )
     parser.add_argument("--cursor-smoothing", type=smoothing_fraction, default=0.35)
     parser.add_argument("--fine-sensitivity", type=positive_float, default=0.35)
@@ -124,11 +130,10 @@ def build_parser() -> argparse.ArgumentParser:
 def run(args: argparse.Namespace) -> int:
     from .detectors import (
         HorizontalThumbClickDetector,
-        OpenPalmScrollDetector,
+        LeftPalmTiltScrollDetector,
         PeaceSignClickDetector,
         is_emergency_fist,
-        is_thumb_index_pinch,
-        pinch_point,
+        palm_control_point,
     )
     from .tracker import MediaPipeHandTracker
 
@@ -170,12 +175,8 @@ def run(args: argparse.Namespace) -> int:
 
             click_detector = HorizontalThumbClickDetector(stable_time=args.click_stable_time)
             right_click_detector = PeaceSignClickDetector(stable_time=args.click_stable_time)
-            scroll_detector = OpenPalmScrollDetector(
-                stable_time=args.scroll_stable_time,
-                repeat_interval=args.scroll_repeat_interval,
-            )
-            pointer_detector = PinchPointerDetector(stable_time=args.pointer_stable_time)
-            pinch_tracker = PinchPointTracker()
+            scroll_detector = LeftPalmTiltScrollDetector(stable_time=args.scroll_stable_time)
+            pointer_detector = PalmPointerDetector(stable_time=args.pointer_stable_time)
             initial_position = controller.position()
             cursor_mapper = CursorMapper(
                 controller.display_for_position(initial_position),
@@ -212,9 +213,9 @@ def run(args: argparse.Namespace) -> int:
                 last_timestamp_ms = timestamp_ms
                 _result, poses = tracker.process(rgb, timestamp_ms)
                 fist_stop = any(is_emergency_fist(hand) for hand in poses)
+                scroll_event = 0
                 if fist_stop:
                     pointer_detector.reset()
-                    pinch_tracker.reset()
                     click_detector.reset()
                     right_click_detector.reset()
                     scroll_detector.reset()
@@ -230,15 +231,15 @@ def run(args: argparse.Namespace) -> int:
                         )
                     cursor_position = None
                 else:
+                    scroll_event = scroll_detector.update(poses, now, frame_aspect_ratio=frame.shape[1] / frame.shape[0])
                     pointer_mode = pointer_detector.update(poses, now)
                     right_pose = next((pose for pose in poses if pose.handedness == "right"), None)
-                    right_pinching = right_pose is not None and is_thumb_index_pinch(
-                        right_pose.points,
-                        right_pose.box_scale,
+                    control_point = (
+                        palm_control_point(right_pose.points)
+                        if pointer_mode == POINTER_FINE and right_pose is not None else None
                     )
                     if pointer_mode != cursor_mapper.mode:
                         screen_position = controller.position()
-                        control_point = pinch_point(right_pose.points) if right_pinching else None
                         cursor_mapper.set_mode(
                             pointer_mode,
                             control_point,
@@ -246,28 +247,6 @@ def run(args: argparse.Namespace) -> int:
                             now,
                             controller.display_for_position(screen_position),
                         )
-                        if pointer_mode != POINTER_FINE:
-                            pinch_tracker.reset()
-
-                    control_point = None
-                    if pointer_mode == POINTER_FINE:
-                        if right_pinching:
-                            control_point = pinch_point(right_pose.points)
-                            pinch_tracker.remember(frame, right_pose.points, right_pose.box_scale)
-                        elif pinch_tracker.active:
-                            control_point = pinch_tracker.update(frame)
-                        if control_point is None:
-                            pointer_detector.reset()
-                            pinch_tracker.reset()
-                            pointer_mode = POINTER_IDLE
-                            screen_position = controller.position()
-                            cursor_mapper.set_mode(
-                                POINTER_IDLE,
-                                None,
-                                screen_position,
-                                now,
-                                controller.display_for_position(screen_position),
-                            )
                     cursor_position = cursor_mapper.update(control_point, now)
                 if cursor_position is not None:
                     controller.move_cursor(cursor_position)
@@ -280,18 +259,12 @@ def run(args: argparse.Namespace) -> int:
                     right_click_pose = pose.handedness == "right" and pose.peace_sign
                     if right_click_detector.update(right_click_pose, now):
                         controller.right_click()
-                    scroll_event = scroll_detector.update(
-                        pose.finger_count,
-                        pose.handedness,
-                        now,
-                        pinch=pose.pinch,
-                    )
-                    if scroll_event:
-                        controller.scroll(scroll_event)
                 else:
                     click_detector.reset()
                     right_click_detector.reset()
-                    scroll_detector.reset()
+
+                if scroll_event:
+                    controller.scroll(scroll_event)
 
                 if overlay is not None:
                     overlay.update(poses, controller.position(), cursor_mapper.display)

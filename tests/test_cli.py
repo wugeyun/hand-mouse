@@ -1,3 +1,4 @@
+from dataclasses import replace
 from types import SimpleNamespace
 
 import numpy as np
@@ -5,8 +6,13 @@ import pytest
 
 from hand_mouse import cli, tracker
 from hand_mouse.cli import build_parser, strictly_increasing_timestamp
-from hand_mouse.detectors import HandPose, HorizontalThumbClickDetector, OpenPalmScrollDetector, PeaceSignClickDetector
-from hand_mouse.pointer import POINTER_FINE, POINTER_IDLE, PinchPointerDetector
+from hand_mouse.detectors import (
+    HandPose,
+    HorizontalThumbClickDetector,
+    LeftPalmTiltScrollDetector,
+    PeaceSignClickDetector,
+)
+from hand_mouse.pointer import POINTER_FINE, POINTER_IDLE, PalmPointerDetector
 
 
 def test_timestamp_advances_when_frames_share_a_millisecond() -> None:
@@ -22,27 +28,27 @@ def test_timestamp_catches_up_to_elapsed_time() -> None:
 def test_default_clicks_and_pointer_arm_at_300ms() -> None:
     args = build_parser().parse_args([])
     assert args.click_stable_time == args.pointer_stable_time == 0.3
-    assert args.scroll_stable_time == 0.5
+    assert args.scroll_stable_time == 0.1
     for detector_class in (HorizontalThumbClickDetector, PeaceSignClickDetector):
         detector = detector_class()
         assert not detector.update(True, 0.0)
         assert not detector.update(True, 0.299)
         assert detector.update(True, 0.3)
         assert not detector.update(True, 0.4)
-    detector = PinchPointerDetector()
-    hand = pinching_hand()
+    detector = PalmPointerDetector()
+    hand = open_hand()
     assert detector.update([hand], 0.0) == POINTER_IDLE
     assert detector.update([hand], 0.299) == POINTER_IDLE
     assert detector.update([hand], 0.3) == POINTER_FINE
 
 
-def test_default_scroll_starts_at_500ms_and_repeats_every_250ms() -> None:
-    detector = OpenPalmScrollDetector()
-    assert detector.update(5, "left", 0.0) == 0
-    assert detector.update(5, "left", 0.499) == 0
-    assert detector.update(5, "left", 0.5) == 1
-    assert detector.update(5, "left", 0.749) == 0
-    assert detector.update(5, "left", 0.75) == 1
+def test_default_upright_hold_prepares_one_tilt_scroll(standing_hand) -> None:
+    detector = LeftPalmTiltScrollDetector()
+    assert detector.update([standing_hand()], 0) == 0
+    assert detector.update([standing_hand()], 0.15) == 0
+    assert detector.update([standing_hand()], 0.3) == 0
+    assert detector.update([standing_hand(angle=35)], 0.4) == -1
+    assert detector.update([standing_hand(angle=35)], 0.5) == 0
 
 
 @pytest.mark.parametrize("option, value", [
@@ -60,13 +66,17 @@ def test_invalid_parameters_are_rejected_before_startup(option, value) -> None:
     assert exc.value.code == 2
 
 
-def pinching_hand() -> HandPose:
+def open_hand(side="right") -> HandPose:
     points = np.zeros((21, 3), dtype=np.float32)
     points[0, :2] = (0.5, 0.8)
-    points[3, :2] = (0.4, 0.6)
-    points[6, :2] = (0.5, 0.6)
-    points[4, :2] = points[8, :2] = (0.5, 0.3)
-    return HandPose(points, np.array((0.5, 0.5)), 0.2, pinch=True, handedness="right")
+    points[[5, 9, 13, 17], :2] = ((0.35, 0.4), (0.45, 0.4), (0.55, 0.4), (0.65, 0.4))
+    return HandPose(points, np.array((0.5, 0.6)), 0.4, finger_count=5, handedness=side)
+
+
+def shifted(hand, dy):
+    points = hand.points.copy()
+    points[:, 1] += dy
+    return replace(hand, points=points)
 
 
 @pytest.fixture
@@ -75,7 +85,7 @@ def runtime(monkeypatch):
 
     state = SimpleNamespace(
         closed=0, released=0, overlay_closed=0, updates=[], lifecycle=[],
-        opened=True, frames=[], poses=[], moves=[], position=(960, 540), times=iter([0.0]),
+        opened=True, frames=[], poses=[], moves=[], scrolls=[], clicks=[], position=(960, 540), times=iter([0.0]),
     )
 
     class FakeTracker:
@@ -117,6 +127,15 @@ def runtime(monkeypatch):
     class FakeController:
         def __init__(self, **kwargs):
             self.live = kwargs["live"]
+
+        def scroll(self, direction):
+            state.scrolls.append(direction)
+
+        def left_click(self):
+            state.clicks.append("left")
+
+        def right_click(self):
+            state.clicks.append("right")
 
         def position(self):
             return state.position
@@ -197,8 +216,8 @@ def test_no_preview_disables_the_desktop_overlay(runtime) -> None:
 
 
 def test_overlay_receives_current_cursor_after_movement(runtime) -> None:
-    hands = [pinching_hand() for _ in range(3)]
-    hands[-1].points[[4, 8], 0] += 0.1
+    hands = [open_hand() for _ in range(3)]
+    hands[-1].points[:, 0] += 0.1
     runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in hands]
     runtime.poses = [[hand] for hand in hands]
     runtime.times = iter([0.0, 0.1, 0.4, 0.5])
@@ -232,44 +251,83 @@ def test_overlay_startup_failure_releases_camera_and_tracker(runtime, monkeypatc
     assert (runtime.closed, runtime.released, runtime.overlay_closed) == (1, 1, 0)
 
 
-def test_reliable_pinch_skips_local_tracking_and_loss_uses_fallback(runtime, monkeypatch) -> None:
-    calls = []
-
-    class FakeTracker:
-        def init(self, frame, box):
-            self.box = box
-            calls.append("init")
-            return True
-
-        def update(self, frame):
-            calls.append("update")
-            return True, self.box
-
-    monkeypatch.setattr(cli.PinchPointTracker, "_create_tracker", staticmethod(FakeTracker))
-    hand = pinching_hand()
-    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in range(4)]
-    runtime.poses = [[hand], [hand], [hand], []]
-    runtime.times = iter([0.0, 0.1, 0.4, 0.5, 0.6])
+@pytest.mark.parametrize("stop", ["loss", "pinch", "partial", "left_fist", "right_fist"])
+def test_pointer_stops_immediately_when_palm_closes_or_hand_is_lost(runtime, stop) -> None:
+    hand = open_hand()
+    stopping = {
+        "loss": [],
+        "pinch": [replace(hand, finger_count=2, pinch=True)],
+        "partial": [replace(hand, finger_count=4)],
+        "left_fist": [hand, replace(open_hand("left"), finger_count=0, fist=True)],
+        "right_fist": [replace(hand, finger_count=0, fist=True)],
+    }
+    runtime.poses = [[hand], [hand], [hand], stopping[stop], []]
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in runtime.poses]
+    runtime.times = iter([0, 0.1, 0.41, 0.5, 0.6, 0.7])
     assert cli.main(["--no-preview"]) == 1
-    assert calls == ["init", "init", "update", "update"]
-    # The activation frame preserves the existing cursor; later frames move it.
-    assert len(runtime.moves) == 2
+    assert len(runtime.moves) == 1
+    assert runtime.scrolls == runtime.clicks == []
 
 
-def test_fist_and_pinch_release_cancel_pending_fallback(runtime, monkeypatch) -> None:
-    hand = pinching_hand()
-    fist = HandPose(np.zeros((21, 3)), np.array((0.5, 0.5)), 0.2, fist=True, handedness="left")
-
-    def unexpected_tracker():
-        pytest.fail("a stopped pointer must not start local tracking")
-
-    monkeypatch.setattr(cli.PinchPointTracker, "_create_tracker", staticmethod(unexpected_tracker))
-    released = HandPose(np.zeros((21, 3)), np.array((0.5, 0.5)), 0.2, handedness="right")
-    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in range(8)]
-    runtime.poses = [[hand], [hand], [fist], [], [hand], [hand], [released], []]
-    runtime.times = iter([0.0, 0.1, 0.4, 0.5, 0.6, 0.7, 1.1, 1.2, 1.3])
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_grab_never_scrolls_and_stops_cursor(runtime, side) -> None:
+    hand = open_hand(side)
+    fist = replace(hand, finger_count=0, fist=True)
+    runtime.poses = [[hand], [hand], [hand], [fist], [fist], [fist]]
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in runtime.poses]
+    runtime.times = iter([0, 0.1, 0.41, 0.7, 0.8, 0.9, 1.2])
     assert cli.main(["--no-preview"]) == 1
-    assert runtime.moves == []
+    assert runtime.scrolls == runtime.clicks == []
+    assert len(runtime.moves) == (1 if side == "right" else 0)
+
+
+@pytest.mark.parametrize("angle, direction", [(20, -1), (-20, 1)])
+@pytest.mark.parametrize("with_right", [False, True])
+def test_left_tilt_scrolls_once_with_no_return_or_cursor_conflicts(
+    runtime, standing_hand, angle, direction, with_right,
+) -> None:
+    hands = [standing_hand(), standing_hand(), standing_hand(),
+             standing_hand(angle=angle), standing_hand(angle=angle), standing_hand(), standing_hand(angle=-angle)]
+    right = open_hand()
+    runtime.poses = [
+        [hand, shifted(right, index * 0.01)] if with_right else [hand]
+        for index, hand in enumerate(hands)
+    ]
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in hands]
+    runtime.times = iter([0, 0.1, 0.25, 0.41, 0.5, 0.6, 0.7, 0.75])
+    assert cli.main(["--no-preview"]) == 1
+    assert runtime.scrolls == [direction]
+    assert runtime.clicks == []
+    if with_right:
+        assert runtime.moves and runtime.moves[-1][1] > 540
+    else:
+        assert runtime.moves == []
+
+
+@pytest.mark.parametrize("side", ["left", "right"])
+def test_fist_interrupts_left_tilt_without_scrolling(runtime, standing_hand, side) -> None:
+    fist = standing_hand(tips=(), side=side)
+    runtime.poses = [
+        [standing_hand()], [standing_hand()], [standing_hand()],
+        [fist] if side == "left" else [standing_hand(angle=35), fist], [standing_hand(angle=35)],
+    ]
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in runtime.poses]
+    runtime.times = iter([0, 0.1, 0.25, 0.41, 0.5, 0.6])
+    assert cli.main(["--no-preview"]) == 1
+    assert runtime.scrolls == runtime.moves == runtime.clicks == []
+
+
+@pytest.mark.parametrize("gesture, click", [("thumb_horizontal", "left"), ("peace_sign", "right")])
+def test_click_gestures_keep_timing_and_do_not_trigger_scroll(runtime, gesture, click) -> None:
+    hand = open_hand()
+    clicking = replace(hand, finger_count=1, **{gesture: True})
+    fist = replace(hand, finger_count=0, fist=True)
+    runtime.poses = [[hand], [hand], [clicking], [clicking], [clicking], [fist]]
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in runtime.poses]
+    runtime.times = iter([0, 0.1, 0.7, 0.8, 1.11, 1.2, 1.3])
+    assert cli.main(["--no-preview"]) == 1
+    assert runtime.clicks == [click]
+    assert runtime.scrolls == runtime.moves == []
 
 
 def test_camera_releases_before_native_model_shutdown(runtime) -> None:

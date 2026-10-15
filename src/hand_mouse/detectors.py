@@ -137,6 +137,16 @@ class HandPose:
     handedness: str | None = None
 
 
+def extended_finger_tips(points: np.ndarray) -> tuple[int, ...]:
+    """Return clearly extended long fingertips, regardless of finger identity."""
+    wrist = points[0]
+    return tuple(
+        tip for mcp, pip, tip in ((5, 6, 8), (9, 10, 12), (13, 14, 16), (17, 18, 20))
+        if distance(points[tip], wrist) > distance(points[pip], wrist) * 1.05
+        and finger_straightness(points, mcp, pip, tip) >= 0.75
+    )
+
+
 def is_emergency_fist(hand: HandPose) -> bool:
     """Return True for a fist that is not another explicit hand gesture."""
     return hand.fist and not hand.pinch and not hand.thumb_horizontal
@@ -221,43 +231,60 @@ class PeaceSignClickDetector:
         return True
 
 
-class OpenPalmScrollDetector:
-    """Continuously scroll while a stable left or right open palm is held."""
+def is_open_palm(hand: HandPose) -> bool:
+    """Require five extended fingers without an overlapping click or pinch."""
+    return (
+        hand.finger_count == 5
+        and not hand.fist
+        and not hand.pinch
+        and not hand.thumb_horizontal
+        and not hand.peace_sign
+    )
 
-    def __init__(self, stable_time: float = 0.5, repeat_interval: float = 0.25) -> None:
+
+def palm_control_point(points: np.ndarray) -> np.ndarray:
+    """Use a point inside the palm, three quarters from wrist to knuckles."""
+    return points[0, :2] * 0.25 + points[[5, 9, 13, 17], :2].mean(axis=0) * 0.75
+
+
+class LeftPalmTiltScrollDetector:
+    """Scroll once on a left palm tilt, then require a deliberate upright hold."""
+
+    def __init__(self, stable_time: float = 0.1) -> None:
         self.stable_time = stable_time
-        self.repeat_interval = repeat_interval
-        self.active_hand: str | None = None
-        self.candidate_hand: str | None = None
-        self.candidate_since: float | None = None
-        self.last_scroll: float | None = None
+        self.neutral_since: float | None = None
+        self.last_seen: float | None = None
+        self.armed = False
 
     def reset(self) -> None:
-        self.active_hand = None
-        self.candidate_hand = None
-        self.candidate_since = None
-        self.last_scroll = None
+        self.neutral_since = None
+        self.last_seen = None
+        self.armed = False
 
-    def update(self, finger_count: int, handedness: str | None, now: float, pinch: bool = False) -> int:
-        if pinch:
+    def update(self, hands: list[HandPose], now: float, frame_aspect_ratio: float = 1.0) -> int:
+        if any(is_emergency_fist(hand) for hand in hands):
             self.reset()
             return 0
-        if finger_count != 5 or handedness not in ("left", "right"):
+        left = next((hand for hand in hands if hand.handedness == "left"), None)
+        if self.last_seen is not None and now - self.last_seen > 0.2:
             self.reset()
+        if left is None or len(extended_finger_tips(left.points)) < 3:
             return 0
-        if self.active_hand == handedness:
-            if self.last_scroll is not None and now - self.last_scroll >= self.repeat_interval:
-                self.last_scroll = now
-                return 1 if handedness == "left" else -1
+        axis = left.points[9, :2] - left.points[0, :2]
+        if float(np.linalg.norm(axis)) < 0.03:
             return 0
-        if self.active_hand is not None and self.active_hand != handedness:
-            self.reset()
-        if self.candidate_hand != handedness:
-            self.candidate_hand = handedness
-            self.candidate_since = now
+        tilt = math.degrees(math.atan2(float(axis[0]) * frame_aspect_ratio, -float(axis[1])))
+        if abs(tilt) > 70:
             return 0
-        if self.candidate_since is None or now - self.candidate_since < self.stable_time:
+        self.last_seen = now
+        if abs(tilt) <= 12:
+            if self.neutral_since is None:
+                self.neutral_since = now
+            if now - self.neutral_since + 1e-9 >= self.stable_time:
+                self.armed = True
             return 0
-        self.active_hand = handedness
-        self.last_scroll = now
-        return 1 if handedness == "left" else -1
+        self.neutral_since = None
+        if self.armed and abs(tilt) + 1e-5 >= 20:
+            self.armed = False
+            return -1 if tilt > 0 else 1
+        return 0

@@ -10,7 +10,7 @@ from PySide6.QtGui import QColor, QCursor, QPainter, QPen
 from PySide6.QtWidgets import QApplication, QWidget
 
 from .controller import DisplayBounds
-from .detectors import HandPose, pinch_point
+from .detectors import HandPose, is_open_palm, palm_control_point
 
 HAND_CONNECTIONS = (
     (0, 1), (1, 2), (2, 3), (3, 4),
@@ -31,15 +31,15 @@ def skeleton_lines(
     cursor_position: tuple[int, int] | None = None,
     display: DisplayBounds | None = None,
 ) -> list[Line]:
-    """Scale to the full screen and align a right pinch with the actual cursor."""
+    """Scale to the full screen and align the upper right palm with the actual cursor."""
     scale = np.array((width - 1, height - 1), dtype=np.float64)
     lines = []
     for hand in hands:
         points = np.clip(hand.points[:, :2].astype(np.float64), 0.0, 1.0) * scale
-        if hand.handedness == "right" and hand.pinch and cursor_position is not None and display is not None:
+        if hand.handedness == "right" and is_open_palm(hand) and cursor_position is not None and display is not None:
             cursor = np.array((cursor_position[0] - display.x, cursor_position[1] - display.y), dtype=np.float64)
             cursor *= scale / np.array((max(display.width - 1, 1), max(display.height - 1, 1)))
-            points += cursor - np.clip(pinch_point(hand.points), 0.0, 1.0) * scale
+            points += cursor - np.clip(palm_control_point(hand.points), 0.0, 1.0) * scale
         lines.extend((tuple(points[start]), tuple(points[end])) for start, end in HAND_CONNECTIONS)
     return lines
 

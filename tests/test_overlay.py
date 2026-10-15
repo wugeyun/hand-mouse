@@ -15,8 +15,8 @@ def overlay(monkeypatch):
     instance.close()
 
 
-def hand(points, handedness="right", pinch=False):
-    return HandPose(np.array(points, dtype=np.float32), np.zeros(2), 0.2, pinch=pinch, handedness=handedness)
+def hand(points, handedness="right", open_palm=False):
+    return HandPose(np.array(points, dtype=np.float32), np.zeros(2), 0.2, finger_count=5 if open_palm else 0, handedness=handedness)
 
 
 def test_skeleton_fills_screen_coordinates_and_has_only_connection_lines() -> None:
@@ -30,27 +30,26 @@ def test_skeleton_fills_screen_coordinates_and_has_only_connection_lines() -> No
     assert lines[0] == ((0.0, 0.0), (1919.0, 1079.0))
 
 
-def test_pinched_skeleton_midpoint_matches_cursor_with_display_scaling() -> None:
+def test_upper_palm_skeleton_point_matches_cursor_with_display_scaling() -> None:
     from hand_mouse.overlay import skeleton_lines
 
     points = np.zeros((21, 3))
-    points[4, :2] = (0.4, 0.4)
-    points[8, :2] = (0.6, 0.4)
-    points[3, :2] = (0.3, 0.5)
+    points[0, :2] = (0.5, 0.8)
+    points[[5, 9, 13, 17], :2] = (0.5, 0.4)
     display = DisplayBounds(-1920, 100, 1920, 1080)
-    lines = skeleton_lines([hand(points, pinch=True)], 960, 540, (-960, 640), display)
-    thumb = np.array(lines[3][1])
-    index = np.array(lines[7][1])
+    lines = skeleton_lines([hand(points, open_palm=True)], 960, 540, (-960, 640), display)
+    wrist = np.array(lines[0][0])
+    knuckles = np.array([lines[i][0] for i in (5, 9, 13, 16)])
     expected = np.array((960 * 959 / 1919, 540 * 539 / 1079))
-    assert np.allclose((thumb + index) / 2, expected, atol=1e-4)
-    assert np.allclose(index - thumb, (0.2 * 959, 0), atol=1e-4)
+    assert np.allclose(wrist * 0.25 + knuckles.mean(axis=0) * 0.75, expected, atol=1e-4)
+    assert np.allclose(knuckles[0] - wrist, (0, -0.4 * 539), atol=1e-4)
 
 
 def test_left_hand_is_not_shifted_to_cursor() -> None:
     from hand_mouse.overlay import skeleton_lines
 
     points = np.full((21, 3), 0.5)
-    lines = skeleton_lines([hand(points, "left", pinch=True)], 1001, 1001, (100, 100), DisplayBounds(0, 0, 1001, 1001))
+    lines = skeleton_lines([hand(points, "left", open_palm=True)], 1001, 1001, (100, 100), DisplayBounds(0, 0, 1001, 1001))
     assert lines[0] == ((500.0, 500.0), (500.0, 500.0))
 
 
@@ -61,10 +60,11 @@ def test_live_overlay_aligns_to_actual_qt_cursor_even_if_backend_units_differ(ov
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(400, 300)))
     overlay.live = True
     points = np.full((21, 3), 0.5)
-    overlay.update([hand(points, pinch=True)], (9999, 9999), DisplayBounds(-2000, 1000, 4000, 2000))
-    thumb = np.array(overlay.window.lines[3][1])
-    index = np.array(overlay.window.lines[7][1])
-    assert np.allclose((thumb + index) / 2, (400 - overlay.window.x(), 300 - overlay.window.y()))
+    overlay.update([hand(points, open_palm=True)], (9999, 9999), DisplayBounds(-2000, 1000, 4000, 2000))
+    wrist = np.array(overlay.window.lines[0][0])
+    knuckles = np.array([overlay.window.lines[i][0] for i in (5, 9, 13, 16)])
+    upper_palm = wrist * 0.25 + knuckles.mean(axis=0) * 0.75
+    assert np.allclose(upper_palm, (400 - overlay.window.x(), 300 - overlay.window.y()))
 
 
 def test_overlay_is_transparent_click_through_and_does_not_accept_focus(overlay) -> None:
