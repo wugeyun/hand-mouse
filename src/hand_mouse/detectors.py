@@ -242,9 +242,9 @@ def is_open_palm(hand: HandPose) -> bool:
     )
 
 
-def palm_control_point(points: np.ndarray) -> np.ndarray:
-    """Use a point inside the palm, three quarters from wrist to knuckles."""
-    return points[0, :2] * 0.25 + points[[5, 9, 13, 17], :2].mean(axis=0) * 0.75
+def index_base_point(points: np.ndarray) -> np.ndarray:
+    """Use the index MCP joint where the index finger meets the palm."""
+    return points[5, :2].copy()
 
 
 class LeftPalmTiltScrollDetector:

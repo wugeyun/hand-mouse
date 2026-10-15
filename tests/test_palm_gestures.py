@@ -2,7 +2,7 @@ from dataclasses import replace
 
 import numpy as np
 
-from hand_mouse.detectors import HandPose, palm_control_point
+from hand_mouse.detectors import HandPose, index_base_point
 from hand_mouse.pointer import POINTER_FINE, POINTER_IDLE, PalmPointerDetector
 
 
@@ -13,13 +13,15 @@ def open_hand(side="right"):
     return HandPose(points, np.array((0.5, 0.6)), 0.4, finger_count=5, handedness=side)
 
 
-def test_control_point_is_inside_upper_palm_and_follows_palm_rotation():
+def test_control_point_is_index_base_and_follows_hand_rotation():
     hand = open_hand()
-    assert np.allclose(palm_control_point(hand.points), (0.5, 0.5))
+    assert np.allclose(index_base_point(hand.points), (0.35, 0.4))
     hand.points[[4, 8, 12, 16, 20], :2] = 100
-    assert np.allclose(palm_control_point(hand.points), (0.5, 0.5))
+    assert np.allclose(index_base_point(hand.points), (0.35, 0.4))
+    hand.points[[0, 9, 13, 17], :2] = 0.9
+    assert np.allclose(index_base_point(hand.points), (0.35, 0.4))
     hand.points[:, :2] = hand.points[:, :2] @ np.array(((0, 1), (-1, 0))) + (1, 0)
-    assert np.allclose(palm_control_point(hand.points), (0.5, 0.5))
+    assert np.allclose(index_base_point(hand.points), (0.6, 0.35))
 
 
 def test_right_open_palm_arms_pointer_and_partial_close_or_loss_stops_it():

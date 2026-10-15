@@ -30,7 +30,7 @@ def test_skeleton_fills_screen_coordinates_and_has_only_connection_lines() -> No
     assert lines[0] == ((0.0, 0.0), (1919.0, 1079.0))
 
 
-def test_upper_palm_skeleton_point_matches_cursor_with_display_scaling() -> None:
+def test_index_base_matches_cursor_with_display_scaling() -> None:
     from hand_mouse.overlay import skeleton_lines
 
     points = np.zeros((21, 3))
@@ -39,10 +39,10 @@ def test_upper_palm_skeleton_point_matches_cursor_with_display_scaling() -> None
     display = DisplayBounds(-1920, 100, 1920, 1080)
     lines = skeleton_lines([hand(points, open_palm=True)], 960, 540, (-960, 640), display)
     wrist = np.array(lines[0][0])
-    knuckles = np.array([lines[i][0] for i in (5, 9, 13, 16)])
+    index_base = np.array(lines[4][1])
     expected = np.array((960 * 959 / 1919, 540 * 539 / 1079))
-    assert np.allclose(wrist * 0.25 + knuckles.mean(axis=0) * 0.75, expected, atol=1e-4)
-    assert np.allclose(knuckles[0] - wrist, (0, -0.4 * 539), atol=1e-4)
+    assert np.allclose(index_base, expected, atol=1e-4)
+    assert np.allclose(index_base - wrist, (0, -0.4 * 539), atol=1e-4)
 
 
 def test_left_hand_is_not_shifted_to_cursor() -> None:
@@ -60,11 +60,11 @@ def test_live_overlay_aligns_to_actual_qt_cursor_even_if_backend_units_differ(ov
     monkeypatch.setattr(QCursor, "pos", staticmethod(lambda: QPoint(400, 300)))
     overlay.live = True
     points = np.full((21, 3), 0.5)
+    points[0, :2] = (0.5, 0.8)
+    points[5, :2] = (0.35, 0.4)
     overlay.update([hand(points, open_palm=True)], (9999, 9999), DisplayBounds(-2000, 1000, 4000, 2000))
-    wrist = np.array(overlay.window.lines[0][0])
-    knuckles = np.array([overlay.window.lines[i][0] for i in (5, 9, 13, 16)])
-    upper_palm = wrist * 0.25 + knuckles.mean(axis=0) * 0.75
-    assert np.allclose(upper_palm, (400 - overlay.window.x(), 300 - overlay.window.y()))
+    index_base = np.array(overlay.window.lines[4][1])
+    assert np.allclose(index_base, (400 - overlay.window.x(), 300 - overlay.window.y()))
 
 
 def test_overlay_is_transparent_click_through_and_does_not_accept_focus(overlay) -> None:

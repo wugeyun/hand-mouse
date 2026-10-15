@@ -226,6 +226,19 @@ def test_overlay_receives_current_cursor_after_movement(runtime) -> None:
     assert runtime.updates[-1][1] == runtime.moves[-1]
 
 
+def test_pointer_maps_index_base_to_display_coordinates(runtime) -> None:
+    hand = open_hand()
+    moved = open_hand()
+    moved.points[:, 0] += 0.1
+    runtime.poses = [[hand], [hand], [moved]]
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in runtime.poses]
+    runtime.times = iter([0, 0.1, 0.41, 0.81])
+    assert cli.main([
+        "--no-preview", "--cursor-smoothing", "1", "--fine-sensitivity", "1", "--cursor-max-gain", "1",
+    ]) == 1
+    assert runtime.moves == [(round(0.45 * 1919), round(0.4 * 1079))]
+
+
 def test_overlay_closes_on_keyboard_interrupt(runtime, monkeypatch) -> None:
     from hand_mouse import overlay
 
@@ -299,7 +312,7 @@ def test_left_tilt_scrolls_once_with_no_return_or_cursor_conflicts(
     assert runtime.scrolls == [direction]
     assert runtime.clicks == []
     if with_right:
-        assert runtime.moves and runtime.moves[-1][1] > 540
+        assert len(set(runtime.moves)) > 1
     else:
         assert runtime.moves == []
 
@@ -372,6 +385,89 @@ def test_macos_exit_signals_cleanup_and_restore_handlers(runtime, monkeypatch, s
     assert cli.main([]) == 0
     assert runtime.lifecycle == ["camera", "overlay", "tracker"]
     assert signal.getsignal(exit_signal) == previous_handler
+
+
+def test_exit_request_survives_a_native_callback_swallowing_keyboard_interrupt(runtime, monkeypatch) -> None:
+    import signal
+
+    if not hasattr(signal, "SIGHUP"):
+        pytest.skip("Unix signals unavailable")
+    from hand_mouse import overlay
+
+    monkeypatch.setattr(cli.sys, "platform", "darwin")
+    callbacks = []
+
+    def native_callback(self, *args):
+        callbacks.append("paint")
+        try:
+            signal.getsignal(signal.SIGTERM)(signal.SIGTERM, None)
+        except KeyboardInterrupt:
+            pass  # Native callback bridges can swallow Python exceptions.
+
+    monkeypatch.setattr(overlay.SkeletonOverlay, "update", native_callback)
+    runtime.frames = [np.zeros((100, 100, 3), dtype=np.uint8) for _ in range(2)]
+    runtime.poses = [[], []]
+    runtime.times = iter([0, 0.1, 0.2])
+    assert cli.main([]) == 0
+    assert callbacks == ["paint"]
+    assert runtime.lifecycle == ["camera", "overlay", "tracker"]
+
+
+@pytest.mark.parametrize("blocked", [False, True])
+def test_macos_terminal_close_without_hangup_exits_even_during_native_work(tmp_path, blocked) -> None:
+    import os
+    import subprocess
+    import sys
+    import time
+    from pathlib import Path
+
+    if sys.platform != "darwin":
+        pytest.skip("macOS terminal lifecycle")
+    import pty
+
+    ready = tmp_path / "ready"
+    released = tmp_path / "released"
+    script = """
+import signal
+import sys
+import time
+from pathlib import Path
+from hand_mouse import cli
+cli.NATIVE_SHUTDOWN_TIMEOUT = 0.3
+def fake_run(args, should_exit=None):
+    # Reproduce a terminal close where SIGHUP is ignored or lost.
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    with cli._runtime_resources() as resources:
+        resources.callback(lambda: Path(sys.argv[2]).write_text('released'))
+        Path(sys.argv[1]).write_text('ready')
+        while should_exit is None or not should_exit():
+            time.sleep(60 if sys.argv[3] == 'blocked' else 0.01)
+    return 0
+cli.run = fake_run
+raise SystemExit(cli.main(['--no-preview']))
+"""
+    master, slave = pty.openpty()
+    child = subprocess.Popen(
+        [sys.executable, "-u", "-c", script, str(ready), str(released), "blocked" if blocked else "normal"],
+        stdin=slave, stdout=slave, stderr=slave, start_new_session=True,
+        env={**os.environ, "PYTHONPATH": str(Path(cli.__file__).resolve().parents[1])},
+    )
+    os.close(slave)
+    try:
+        deadline = time.monotonic() + 5
+        while not ready.exists() and child.poll() is None and time.monotonic() < deadline:
+            time.sleep(0.02)
+        assert ready.exists(), "child did not start"
+        os.close(master)
+        master = None
+        assert child.wait(timeout=5) == 0
+        assert released.exists() is not blocked
+    finally:
+        if master is not None:
+            os.close(master)
+        if child.poll() is None:
+            child.kill()
+            child.wait(timeout=5)
 
 
 @pytest.mark.parametrize("raise_error, expected_code", [(False, 0), (True, 1)])

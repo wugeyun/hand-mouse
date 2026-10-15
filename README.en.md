@@ -16,14 +16,14 @@ This is a runnable MVP intended for camera, lighting, and gesture-distance tunin
 | Hold the left palm upright, then tilt right | Scroll page down once | Keep fingers naturally straight; holding the tilt never repeats |
 | Extend the right thumb sideways | Left click | Other fingers folded; fires once after about 300ms |
 | Make a V sign with the right hand | Right click | Index and middle extended, other long fingers folded; fires once after about 300ms |
-| Open all five right-hand fingers | Mouse movement | Arms after about 300ms; the upper palm center controls the cursor; closing stops it |
+| Open all five right-hand fingers | Mouse movement | Arms after about 300ms; the index-finger base controls the cursor; closing stops it |
 | Make a fist with either hand | Global emergency stop | Immediately stops scrolling, clicks, and movement; fists never scroll |
 
 Hold the left palm upright with naturally straight fingers for about 100ms. Keep the wrist roughly still and tilt the palm about 20 degrees right to scroll down once, or left to scroll up once. Directions follow the onscreen skeleton; the thumb need not be stretched out. Holding the tilt never repeats. Return near upright and pause for about 100ms before another scroll; a quick return or crossing directly to the other side does not trigger. Translating the whole hand, vertical movement, and small jitter do not scroll. Hand loss longer than about 200ms or a fist clears readiness, requiring another upright hold. Left-hand tilts work while the right palm moves the cursor.
 
-Holding the right hand open for about 300ms starts cursor movement. The control point sits inside the upper palm, three quarters of the way from the wrist to the center of the four knuckles, and follows palm movement and rotation. Closing any fingers or losing the right hand stops movement immediately. Pinching no longer moves the cursor.
+Holding the right hand open for about 300ms starts cursor movement. The control point is the index-finger base where the finger meets the palm, following hand movement and rotation. Closing any fingers or losing the right hand stops movement immediately. Pinching no longer moves the cursor.
 
-The normalized palm point maps to the full bounds of the display containing the mouse, including the menu bar and Dock/taskbar. Starting movement preserves the cursor position and smoothly removes the initial offset. Each activation selects the display under the cursor; movement does not switch displays automatically. Fast motion increases following speed, and a deadzone filters stationary jitter.
+The normalized index-base point maps to the full bounds of the display containing the mouse, including the menu bar and Dock/taskbar. Starting movement preserves the cursor position and smoothly removes the initial offset. Each activation selects the display under the cursor; movement does not switch displays automatically. Fast motion increases following speed, and a deadzone filters stationary jitter.
 
 A fist with either hand immediately stops scrolling, clicks, and movement, taking priority over left-hand tilts. Fists never scroll. After a stop, pointer and click gestures must satisfy their stability periods again, and the left palm must return upright and pause before scrolling. The original sideways-thumb left click and V-sign right click still fire once after about 300ms.
 
@@ -148,7 +148,7 @@ Test these actions in order:
 - Return the left palm upright for about 100ms, then tilt left. It should print `scroll up` once. Returning upright, translating the whole hand, and right-hand tilts must not scroll.
 - Hold the right thumb sideways for about 300ms; the terminal should print one `left click`. Holding it must not repeat the click.
 - Hold a right-hand V sign for about 300ms; the terminal should print one `right click`. Holding it must not repeat the click.
-- Open all five right-hand fingers for about 300ms to enter pointer mode. The upper palm center aligns with the cursor; closing fingers or losing the hand stops movement.
+- Open all five right-hand fingers for about 300ms to enter pointer mode. The index-finger base aligns with the cursor; closing fingers or losing the hand stops movement.
 - In live mode, move the palm toward all four camera edges and confirm the cursor reaches the matching display edges.
 - Either fist immediately stops scrolling, clicks, and movement. With both hands visible, test right-hand pointer movement together with left-hand scrolling.
 
@@ -205,7 +205,7 @@ Switch to the target application after the process starts and make sure its wind
 - Windows: allow Python or the terminal to access the camera; use `py --list` to inspect installed versions.
 - `No module named cv2` or `mediapipe`: confirm that `.venv312` is active and run `python -m pip install -e .`; do not use another Python's `pip`.
 - Missing or incomplete clone: confirm that `src/hand_mouse/models/hand_landmarker.task` exists; you can also prepare the model manually and run `python run_hand_mouse.py --model PATH`.
-- macOS exit: use `Ctrl+C`. `Ctrl+Z`, terminal closure, and normal termination also clean up and exit. The camera closes before the overlay and model; if native cleanup stalls, this program terminates after 5 seconds. The system camera light may take a few more seconds to turn off.
+- macOS exit: use `Ctrl+C`. `Ctrl+Z`, terminal closure, and normal termination also clean up and exit. Terminal hangup is monitored even if the exit signal is missed. The camera closes before the overlay and model; if native work or cleanup blocks, this program terminates about 5 seconds after the exit request. The system camera light may take a few more seconds to turn off.
 - `Cannot open camera 0`: check camera permissions or try `--camera 1` or `--camera 2`.
 - Dry-run works but live input does not: check macOS Accessibility permissions and the focused target window first.
 
@@ -228,7 +228,7 @@ Windows: double-click `run_windows.bat`. You can also run it from PowerShell:
 
 On the first run, the scripts look for Python 3.12, 3.11, and 3.10 in that order. If no supported version is available, they offer a version choice. macOS uses Homebrew for installation, and Windows uses `winget`; if the required tool is unavailable, the script opens the official Python download page and asks you to run it again. The default virtual-environment directory is `.venv312`; press Enter to accept it or enter a custom name.
 
-After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and draws only live skeleton lines over the desktop: a transparent background, no camera image, landmark dots, or status text, with mouse clicks passing through and input focus preserved. Bone lines use 50% opacity. Camera coordinates fill the full bounds of the display under the cursor. While the right palm is open, the entire skeleton is translated together so the upper palm control point matches the actual cursor position. Lines clear as soon as the hand disappears. Press `Ctrl+C` in the terminal to stop, or use `--no-preview` for manual startup without the skeleton overlay.
+After the first deployment, each script saves a platform-specific local configuration. On later runs, confirm the deployment-skip prompt to go directly to the test and live-start steps. Live mouse control is never started when tests fail. The live command uses `--live` and draws only live skeleton lines over the desktop: a transparent background, no camera image, landmark dots, or status text, with mouse clicks passing through and input focus preserved. Bone lines use 50% opacity. Camera coordinates fill the full bounds of the display under the cursor. While the right palm is open, the entire skeleton is translated together so the index-finger base matches the actual cursor position. Lines clear as soon as the hand disappears. Press `Ctrl+C` in the terminal to stop, or use `--no-preview` for manual startup without the skeleton overlay.
 
 ## Run
 

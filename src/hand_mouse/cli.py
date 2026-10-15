@@ -5,12 +5,13 @@ from __future__ import annotations
 import argparse
 import math
 import os
+import select
 import signal
 import sys
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from contextlib import ExitStack, contextmanager
-from threading import Timer
+from threading import Event, Thread, Timer
 
 from . import __version__
 from .controller import InputController
@@ -127,13 +128,13 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run(args: argparse.Namespace) -> int:
+def run(args: argparse.Namespace, should_exit: Callable[[], bool] | None = None) -> int:
     from .detectors import (
         HorizontalThumbClickDetector,
         LeftPalmTiltScrollDetector,
         PeaceSignClickDetector,
+        index_base_point,
         is_emergency_fist,
-        palm_control_point,
     )
     from .tracker import MediaPipeHandTracker
 
@@ -165,6 +166,8 @@ def run(args: argparse.Namespace) -> int:
             resources.enter_context(tracker)
             # LIFO: camera first, then overlay, then the native model.
             resources.callback(lambda: overlay.close() if overlay is not None else None)
+            if should_exit is not None and should_exit():
+                return 0
             capture = cv2.VideoCapture(args.camera)
             resources.callback(capture.release)
             capture.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
@@ -197,8 +200,10 @@ def run(args: argparse.Namespace) -> int:
 
             start_time = time.monotonic()
             last_timestamp_ms = -1
-            while True:
+            while should_exit is None or not should_exit():
                 ok, frame = capture.read()
+                if should_exit is not None and should_exit():
+                    break
                 if not ok:
                     print("Camera frame read failed", file=sys.stderr)
                     return 1
@@ -212,6 +217,8 @@ def run(args: argparse.Namespace) -> int:
                 )
                 last_timestamp_ms = timestamp_ms
                 _result, poses = tracker.process(rgb, timestamp_ms)
+                if should_exit is not None and should_exit():
+                    break
                 fist_stop = any(is_emergency_fist(hand) for hand in poses)
                 scroll_event = 0
                 if fist_stop:
@@ -235,7 +242,7 @@ def run(args: argparse.Namespace) -> int:
                     pointer_mode = pointer_detector.update(poses, now)
                     right_pose = next((pose for pose in poses if pose.handedness == "right"), None)
                     control_point = (
-                        palm_control_point(right_pose.points)
+                        index_base_point(right_pose.points)
                         if pointer_mode == POINTER_FINE and right_pose is not None else None
                     )
                     if pointer_mode != cursor_mapper.mode:
@@ -279,21 +286,49 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     previous_handlers = {}
     exit_requested = False
+    monitor_stop = Event()
+    monitor = None
+    terminal_fds = tuple(fd for fd in (0, 1, 2) if os.isatty(fd)) if sys.platform == "darwin" else ()
+    terminal_poller = select.poll() if terminal_fds else None
+    if terminal_poller is not None:
+        for fd in terminal_fds:
+            terminal_poller.register(fd, select.POLLHUP | select.POLLERR | select.POLLNVAL)
 
     def request_exit(signum, frame) -> None:
         nonlocal exit_requested
-        # Repeated key presses must not interrupt camera/model cleanup.
-        if not exit_requested:
-            exit_requested = True
-            raise KeyboardInterrupt
+        # Qt/native callbacks can swallow exceptions raised from a signal handler.
+        exit_requested = True
+
+    def should_exit() -> bool:
+        return exit_requested
+
+    def watch_exit() -> None:
+        deadline = None
+        while not monitor_stop.wait(0.1):
+            if (
+                any(not os.isatty(fd) for fd in terminal_fds)
+                or (terminal_poller is not None and terminal_poller.poll(0))
+            ):
+                request_exit(None, None)
+            if exit_requested:
+                now = time.monotonic()
+                if deadline is None:
+                    deadline = now + NATIVE_SHUTDOWN_TIMEOUT
+                elif now >= deadline:
+                    _force_runtime_exit(0)
 
     try:
         if sys.platform == "darwin":
             for exit_signal in (signal.SIGINT, signal.SIGTSTP, signal.SIGHUP, signal.SIGTERM):
                 previous_handlers[exit_signal] = signal.signal(exit_signal, request_exit)
-        return run(args)
+            monitor = Thread(target=watch_exit, name="hand-mouse-exit-watchdog", daemon=True)
+            monitor.start()
+        return run(args, should_exit=should_exit)
     except KeyboardInterrupt:
         return 0
     finally:
+        monitor_stop.set()
+        if monitor is not None:
+            monitor.join(timeout=0.2)
         for exit_signal, previous_handler in previous_handlers.items():
             signal.signal(exit_signal, previous_handler)

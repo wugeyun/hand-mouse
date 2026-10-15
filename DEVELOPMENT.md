@@ -17,7 +17,7 @@
 ```text
 src/hand_mouse/
   cli.py         # 摄像头循环和命令行参数
-  overlay.py     # 透明桌面骨骼绘制和掌内控制点对齐
+  overlay.py     # 透明桌面骨骼绘制和食指根部对齐
   controller.py  # PyAutoGUI 输入事件、显示器边界和平台修饰键
   detectors.py   # 纯几何/时序手势检测器
   tracker.py     # MediaPipe Tasks API 和模型选择/缓存
@@ -41,11 +41,11 @@ run_hand_mouse.py # 未安装项目时的源码入口
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)`：右手拇指横向姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；离开该姿态后再次进入才会重新触发。
 - `PeaceSignClickDetector.update(peace_sign, now)`：右手比耶姿态稳定达到 `--click-stable-time` 后返回 `True`，保持该状态或其他状态返回 `False`；松开后再次进入才会重新触发右键。
 - `PalmPointerDetector.update(hands, now)`：右手五指张开稳定 300ms 后进入鼠标模式；手指收拢或右手丢失立即退出。
-- `palm_control_point(points)`：以 `0.25 × 手腕 + 0.75 × 四指根部均值` 计算掌内偏上的控制点，不依赖指尖位置；捏合移动和局部指尖追踪已取消。
-- `CursorMapper`：将掌内控制点的归一化摄像头坐标映射到进入精细模式时鼠标所在显示器的完整边界；进入时保留当前鼠标位置并平滑消除初始偏差，当前模式不会自动切换显示器；死区以累计位移判断，停手后继续平滑收敛到最后有效目标。
+- `index_base_point(points)`：使用 MediaPipe 第 5 号关键点（食指 MCP，食指与掌心交界处）控制鼠标，并用于骨骼对齐；捏合移动和局部指尖追踪已取消。
+- `CursorMapper`：将食指根部控制点的归一化摄像头坐标映射到进入精细模式时鼠标所在显示器的完整边界；进入时保留当前鼠标位置并平滑消除初始偏差，当前模式不会自动切换显示器；死区以累计位移判断，停手后继续平滑收敛到最后有效目标。
 - 任意一只手握拳优先急停并重置滚动、点击和鼠标移动；拳头判定排除明确的捏合和横向拇指姿态，左右键手势保持原有方式。
-- `SkeletonOverlay`：主线程更新透明置顶窗口，仅绘制 50% 不透明度的骨骼连线，不接受鼠标或键盘焦点；摄像头归一化坐标映射到当前显示器全屏，右手张掌时骨骼整体平移，使掌内控制点对齐实际光标，无手时清空。`--no-preview` 禁用绘制，终端 `Ctrl+C` 退出。
-- `_runtime_resources` 按摄像头、骨骼、模型顺序清理；某个回调异常不会跳过其他回调。macOS 以 5 秒计时器限制原生关闭等待，超时只结束当前程序，异常路径保留失败退出码。`SIGINT`、`SIGTSTP`、`SIGHUP`、`SIGTERM` 请求退出，清理期间忽略重复信号；macOS 启动脚本用 `exec`。
+- `SkeletonOverlay`：主线程更新透明置顶窗口，仅绘制 50% 不透明度的骨骼连线，不接受鼠标或键盘焦点；摄像头归一化坐标映射到当前显示器全屏，右手张掌时骨骼整体平移，使食指根部对齐实际光标，无手时清空。`--no-preview` 禁用绘制，终端 `Ctrl+C` 退出。
+- `_runtime_resources` 按摄像头、骨骼、模型顺序清理；某个回调异常不会跳过其他回调。macOS 以 5 秒计时器限制原生关闭等待，超时只结束当前程序，异常路径保留失败退出码。`SIGINT`、`SIGTSTP`、`SIGHUP`、`SIGTERM` 只设置退出标记，主循环在读帧和推理后检查，避免原生回调吞掉异常。macOS 后台监测启动时的终端描述符，结合 `poll` 挂断事件与终端失效判断；即使退出信号丢失也会退出，从退出请求开始最多 5 秒结束原生阻塞。macOS 启动脚本用 `exec`。
 - `InputController` 是唯一负责发送真实输入事件的类，提供左键和右键发送方法。检测器和单元测试不能直接调用 PyAutoGUI。
 
 ## 本地开发
@@ -91,7 +91,7 @@ python -m hand_mouse --live
 - `--cursor-acceleration-speed`：达到最大增益时的归一化手部速度。
 - `--cursor-deadzone`：忽略静止抖动的最小归一化位移。
 
-跟随比例使用平方曲线：`base_gain + (max_gain - base_gain) * speed_ratio^2`，并限制在 `0..1`。进入精细模式时，映射器记录当前鼠标位置与掌内控制点绝对目标之间的偏差，在短暂过渡期内逐步消除该偏差，因此不会在识别瞬间跳到目标位置。显示器边界来自完整显示器范围，而不是排除菜单栏、Dock 或任务栏后的工作区。
+跟随比例使用平方曲线：`base_gain + (max_gain - base_gain) * speed_ratio^2`，并限制在 `0..1`。进入精细模式时，映射器记录当前鼠标位置与食指根部控制点绝对目标之间的偏差，在短暂过渡期内逐步消除该偏差，因此不会在识别瞬间跳到目标位置。显示器边界来自完整显示器范围，而不是排除菜单栏、Dock 或任务栏后的工作区。
 
 误触发时提高 `--scroll-stable-time`，并增加光照或扩大摄像头取景区域。
 

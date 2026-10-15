@@ -17,7 +17,7 @@ The project targets general desktop interaction, so it prioritizes low cognitive
 ```text
 src/hand_mouse/
   cli.py         # camera loop and CLI arguments
-  overlay.py     # transparent desktop skeleton and upper-palm alignment
+  overlay.py     # transparent desktop skeleton and index-base alignment
   controller.py  # PyAutoGUI input events, display bounds, and platform modifiers
   detectors.py   # pure geometry/time-series gesture detectors
   tracker.py     # MediaPipe Tasks API and model selection/cache
@@ -41,11 +41,11 @@ camera frame -> MediaPipe Tasks landmarks -> HandPose -> detector -> abstract ac
 - `HorizontalThumbClickDetector.update(thumb_horizontal, now)` returns `True` after `--click-stable-time` seconds of a stable right horizontal-thumb pose and `False` while the state is held or for other states. Leaving the pose is required before another click can fire.
 - `PeaceSignClickDetector.update(peace_sign, now)` returns `True` after `--click-stable-time` seconds of a stable right-hand V sign and `False` while the state is held or for other states. Leaving the pose is required before another right click can fire.
 - `PalmPointerDetector.update(hands, now)` arms mouse movement after 300ms with the right hand fully open. Closing fingers or losing the hand stops immediately.
-- `palm_control_point(points)` computes `0.25 * wrist + 0.75 * mean(four knuckles)`, inside the upper palm and independent of fingertips. Pinch movement and local fingertip tracking have been removed.
-- `CursorMapper` maps the normalized upper palm point to the full bounds of the display containing the cursor when fine mode starts. It preserves the current cursor position, then smoothly removes the initial offset; the active mode does not switch displays automatically. The deadzone uses accumulated movement, and smoothing continues toward the last accepted target after the hand stops.
+- `index_base_point(points)` uses MediaPipe landmark 5, the index MCP joint where the finger meets the palm, for both cursor mapping and skeleton alignment. Pinch movement and local fingertip tracking have been removed.
+- `CursorMapper` maps the normalized index-base point to the full bounds of the display containing the cursor when fine mode starts. It preserves the current cursor position, then smoothly removes the initial offset; the active mode does not switch displays automatically. The deadzone uses accumulated movement, and smoothing continues toward the last accepted target after the hand stops.
 - Either fist takes stop priority and resets scrolling, clicks, and movement. Explicit pinches and horizontal-thumb poses are excluded from fist classification; click gestures retain their existing behavior.
-- `SkeletonOverlay` updates a transparent topmost window on the main thread, drawing only bone connections at 50% opacity and accepting neither mouse input nor keyboard focus. Camera coordinates fill the current display; an open right-hand skeleton is translated as a whole to align the upper palm point with the actual cursor, and missing hands clear the lines. `--no-preview` disables drawing; terminal `Ctrl+C` exits.
-- `_runtime_resources` cleans up in camera, overlay, then model order and continues other cleanup callbacks after an error. On macOS, a 5-second timer terminates only this application if native cleanup stalls; exceptions preserve a failure exit code. `SIGINT`, `SIGTSTP`, `SIGHUP`, and `SIGTERM` request cleanup, and repeat signals are ignored during shutdown. The macOS launcher uses `exec`.
+- `SkeletonOverlay` updates a transparent topmost window on the main thread, drawing only bone connections at 50% opacity and accepting neither mouse input nor keyboard focus. Camera coordinates fill the current display; an open right-hand skeleton is translated as a whole to align the index-finger base with the actual cursor, and missing hands clear the lines. `--no-preview` disables drawing; terminal `Ctrl+C` exits.
+- `_runtime_resources` cleans up in camera, overlay, then model order and continues other cleanup callbacks after an error. On macOS, a 5-second timer terminates only this application if native cleanup stalls; exceptions preserve a failure exit code. `SIGINT`, `SIGTSTP`, `SIGHUP`, and `SIGTERM` set a persistent exit flag, checked after camera reads and inference, so native callbacks cannot swallow exit exceptions. A macOS watchdog monitors the initial terminal descriptors with hangup polling and terminal validity checks, covering missed signals and bounding native blockage to five seconds after an exit request. The macOS launcher uses `exec`.
 - `InputController` is the only class allowed to send real input events and provides left- and right-click methods. Detectors and unit tests must not call PyAutoGUI directly.
 
 ## Local development
